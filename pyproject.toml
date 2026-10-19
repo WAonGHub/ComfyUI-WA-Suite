@@ -1,0 +1,15 @@
+[project]
+name = "comfyui-wa-suite"
+description = "WA Node Suite for ComfyUI: High-performance utility nodes including a 100-input lazy wildcard Index Switch and a 60-entry Find & Replace node."
+version = "1.0.0"
+authors = [{ name = "WA" }]
+license = { text = "MIT" }
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/WAonGHub/ComfyUI-WA-Suite"
+
+[tool.comfy]
+PublisherId = "wa"
+DisplayName = "WA Node Suite"
+Icon = ""

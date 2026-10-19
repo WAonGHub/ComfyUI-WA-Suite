@@ -1,0 +1,27 @@
+"""
+WA Node Suite for ComfyUI
+Modular custom node suite by WA.
+"""
+
+from .nodes.switches import (
+    NODE_CLASS_MAPPINGS as SWITCH_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as SWITCH_NAMES,
+)
+from .nodes.strings import (
+    NODE_CLASS_MAPPINGS as STRING_CLASSES,
+    NODE_DISPLAY_NAME_MAPPINGS as STRING_NAMES,
+)
+
+NODE_CLASS_MAPPINGS = {
+    **SWITCH_CLASSES,
+    **STRING_CLASSES,
+}
+
+NODE_DISPLAY_NAME_MAPPINGS = {
+    **SWITCH_NAMES,
+    **STRING_NAMES,
+}
+
+WEB_DIRECTORY = "./web"
+
+__all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
