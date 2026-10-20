@@ -1,19 +1,23 @@
 import { app } from "../../../scripts/app.js";
 
-const FIND_REPLACE_VARIANTS = [
-    { type: "WFA_FindAndReplace20", count: 20, label: "WFA Find & Replace 20 ⚡" },
-    { type: "WFA_FindAndReplace40", count: 40, label: "WFA Find & Replace 40 ⚡" },
-    { type: "WFA_FindAndReplace60", count: 60, label: "WFA Find & Replace 60 ⚡" },
-];
+const SIZES = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+const FIND_REPLACE_VARIANTS = SIZES.map((count) => ({
+    type: `WFA_FindAndReplace${count}`,
+    count,
+    label: `WFA Find & Replace ${count} ⚡`,
+}));
 
 const VARIANT_TYPES = new Set([
-    "WFA_FindAndReplace20",
-    "WFA_FindAndReplace40",
-    "WFA_FindAndReplace60",
-    "WA_FindAndReplace20",
-    "WA_FindAndReplace40",
-    "WA_FindAndReplace60",
+    ...SIZES.map((c) => `WFA_FindAndReplace${c}`),
+    ...SIZES.map((c) => `WA_FindAndReplace${c}`),
 ]);
+
+function getCurrentSize(node) {
+    const cls = node.comfyClass || node.type || "";
+    const match = cls.match(/(\d+)$/);
+    return match ? Number(match[1]) : null;
+}
 
 function getSlotLinkInfo(node, slotIdx) {
     if (slotIdx < 0 || !node.inputs) return null;
@@ -46,7 +50,11 @@ function upgradeFindReplaceNode(oldNode, targetType) {
     if (oldNode.size && newNode.size) {
         newNode.size[0] = oldNode.size[0];
     }
-    if (oldNode.title && !oldNode.title.startsWith("WFA Find & Replace") && !oldNode.title.startsWith("WA Find & Replace")) {
+    if (
+        oldNode.title &&
+        !oldNode.title.startsWith("WFA Find & Replace") &&
+        !oldNode.title.startsWith("WA Find & Replace")
+    ) {
         newNode.title = oldNode.title;
     }
     if (oldNode.color) newNode.color = oldNode.color;
@@ -157,20 +165,48 @@ app.registerExtension({
                 origGetExtraMenuOptions.apply(this, arguments);
             }
 
-            const upgradeOptions = [];
-            for (const variant of FIND_REPLACE_VARIANTS) {
-                if (this.comfyClass === variant.type || this.type === variant.type) continue;
-                upgradeOptions.push({
-                    content: `⚡ Convert to ${variant.label} (Keep All Wires & Text)`,
-                    callback: () => {
-                        upgradeFindReplaceNode(this, variant.type);
-                    },
+            const curSize = getCurrentSize(this);
+            const topMenuItems = [];
+
+            // Quick +10 and -10 step items right at the top
+            if (curSize != null && curSize + 10 <= 100) {
+                const nextSize = curSize + 10;
+                topMenuItems.push({
+                    content: `⚡ Expand +10 Entries (to ${nextSize})`,
+                    callback: () => upgradeFindReplaceNode(this, `WFA_FindAndReplace${nextSize}`),
+                });
+            }
+            if (curSize != null && curSize - 10 >= 10) {
+                const prevSize = curSize - 10;
+                topMenuItems.push({
+                    content: `⚡ Shrink -10 Entries (to ${prevSize})`,
+                    callback: () => upgradeFindReplaceNode(this, `WFA_FindAndReplace${prevSize}`),
                 });
             }
 
-            if (upgradeOptions.length > 0) {
-                options.unshift(...upgradeOptions, null);
-            }
+            // Submenu with all sizes 10..100
+            const submenuOptions = FIND_REPLACE_VARIANTS.map((variant) => ({
+                content:
+                    variant.count === curSize
+                        ? `✓ ${variant.label} (Current)`
+                        : `⚡ ${variant.label}`,
+                disabled: variant.count === curSize,
+                callback: () => {
+                    if (variant.count !== curSize) {
+                        upgradeFindReplaceNode(this, variant.type);
+                    }
+                },
+            }));
+
+            topMenuItems.push({
+                content: "⚡ Convert Find & Replace Size (10–100)",
+                has_submenu: true,
+                submenu: {
+                    options: submenuOptions,
+                },
+            });
+
+            options.unshift(...topMenuItems, null);
         };
     },
 });

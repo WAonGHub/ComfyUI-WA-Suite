@@ -145,19 +145,24 @@ class _WAFindAndReplaceBase:
             return (result,)
 
 
-class WFA_FindAndReplace20(_WAFindAndReplaceBase):
-    """WFA Find & Replace 20: 20-entry string find and replace node."""
-    NUM_ENTRIES = 20
+FIND_REPLACE_SIZES = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
 
+_FIND_REPLACE_CLASSES = {}
+_FIND_REPLACE_NAMES = {}
 
-class WFA_FindAndReplace40(_WAFindAndReplaceBase):
-    """WFA Find & Replace 40: 40-entry string find and replace node."""
-    NUM_ENTRIES = 40
-
-
-class WFA_FindAndReplace60(_WAFindAndReplaceBase):
-    """WFA Find & Replace 60: 60-entry string find and replace node."""
-    NUM_ENTRIES = 60
+for _size in FIND_REPLACE_SIZES:
+    _cls_name = f"WFA_FindAndReplace{_size}"
+    _cls = type(
+        _cls_name,
+        (_WAFindAndReplaceBase,),
+        {
+            "__doc__": f"WFA Find & Replace {_size}: {_size}-entry string find and replace node.",
+            "NUM_ENTRIES": _size,
+        },
+    )
+    globals()[_cls_name] = _cls
+    _FIND_REPLACE_CLASSES[_cls_name] = _cls
+    _FIND_REPLACE_NAMES[_cls_name] = f"WFA Find & Replace {_size} ⚡ (WFA Suite)"
 
 
 _COMMENT_PREFIX_RE = re.compile(r"^\s*/\*\s*\d+\s*\*/\s*")
@@ -222,15 +227,11 @@ class WFA_TextIndexSwitch:
 
 
 NODE_CLASS_MAPPINGS = {
-    "WFA_FindAndReplace20": WFA_FindAndReplace20,
-    "WFA_FindAndReplace40": WFA_FindAndReplace40,
-    "WFA_FindAndReplace60": WFA_FindAndReplace60,
+    **_FIND_REPLACE_CLASSES,
     "WFA_TextIndexSwitch": WFA_TextIndexSwitch,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WFA_FindAndReplace20": "WFA Find & Replace 20 ⚡ (WFA Suite)",
-    "WFA_FindAndReplace40": "WFA Find & Replace 40 ⚡ (WFA Suite)",
-    "WFA_FindAndReplace60": "WFA Find & Replace 60 ⚡ (WFA Suite)",
+    **_FIND_REPLACE_NAMES,
     "WFA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
 }

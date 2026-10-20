@@ -17,14 +17,12 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
     - **`Ctrl + Click`** a row number: Inserts an empty slot at that row and **shifts all connected wires & labels below it down by 1**.
     - **`Shift + Click`** (or **`Alt + Click`**) a row number: Deletes that row and **pulls all connected wires & labels below it up by 1**.
 
-### 2. `WFA Find & Replace (20 / 40 / 60) ⚡ (WFA Suite)`
+### 2. `WFA Find & Replace (10 / 20 / 30 / 40 / 50 / 60 / 70 / 80 / 90 / 100) ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Strings`
 - **Variants**:
-  - `WFA Find & Replace 20 ⚡ (WFA Suite)` (`find_1`/`replace_1` … `find_20`/`replace_20`)
-  - `WFA Find & Replace 40 ⚡ (WFA Suite)` (`find_1`/`replace_1` … `find_40`/`replace_40`)
-  - `WFA Find & Replace 60 ⚡ (WFA Suite)` (`find_1`/`replace_1` … `find_60`/`replace_60`)
+  - 10 sizes from **`WFA Find & Replace 10 ⚡`** up to **`WFA Find & Replace 100 ⚡`** (in steps of 10).
 - **Features**:
-  - **1-Click Upgrade / Resize (`20` $\leftrightarrow$ `40` $\leftrightarrow$ `60`)**: Right-click any Find & Replace node and select **`⚡ Convert to WFA Find & Replace 40 / 60 (Keep All Wires & Text)`** to upgrade (or downsize) in-place while keeping all connected wires, typed text, custom slot labels, title, and colors.
+  - **1-Click Upgrade / Resize (`+10`, `-10`, or Any Size `10–100`)**: Right-click any Find & Replace node to **`⚡ Expand +10 Entries`**, **`⚡ Shrink -10 Entries`**, or jump to any size (`10` to `100`) in-place while keeping all connected wires, typed text, custom slot labels, title, and colors.
   - **Direct `● text` Input Socket**: Clean connection dot at the top instead of a bulky multiline textbox.
   - **Simultaneous (Single-Pass) Mode**: Compiles all active search strings into a single LRU-cached pass with $O(1)$ lookup per match.
   - **Sequential (Chained) Mode**: Applies replacements in order (`1` $\rightarrow$ $N$) using fast C-level `str.replace`.
