@@ -145,27 +145,27 @@ class _WAFindAndReplaceBase:
             return (result,)
 
 
-class WA_FindAndReplace20(_WAFindAndReplaceBase):
-    """WA Find & Replace 20: 20-entry string find and replace node."""
+class WFA_FindAndReplace20(_WAFindAndReplaceBase):
+    """WFA Find & Replace 20: 20-entry string find and replace node."""
     NUM_ENTRIES = 20
 
 
-class WA_FindAndReplace40(_WAFindAndReplaceBase):
-    """WA Find & Replace 40: 40-entry string find and replace node."""
+class WFA_FindAndReplace40(_WAFindAndReplaceBase):
+    """WFA Find & Replace 40: 40-entry string find and replace node."""
     NUM_ENTRIES = 40
 
 
-class WA_FindAndReplace60(_WAFindAndReplaceBase):
-    """WA Find & Replace 60: 60-entry string find and replace node."""
+class WFA_FindAndReplace60(_WAFindAndReplaceBase):
+    """WFA Find & Replace 60: 60-entry string find and replace node."""
     NUM_ENTRIES = 60
 
 
 _COMMENT_PREFIX_RE = re.compile(r"^\s*/\*\s*\d+\s*\*/\s*")
 
 
-class WA_TextIndexSwitch:
+class WFA_TextIndexSwitch:
     """
-    WA Text Index Switch: Multiline prompt/text selector with row numbers and
+    WFA Text Index Switch: Multiline prompt/text selector with row numbers and
     alternating dark/light grey row shading in the UI.
     Each line (row 0, 1, 2, ...) corresponds to its row index.
     """
@@ -222,15 +222,15 @@ class WA_TextIndexSwitch:
 
 
 NODE_CLASS_MAPPINGS = {
-    "WA_FindAndReplace20": WA_FindAndReplace20,
-    "WA_FindAndReplace40": WA_FindAndReplace40,
-    "WA_FindAndReplace60": WA_FindAndReplace60,
-    "WA_TextIndexSwitch": WA_TextIndexSwitch,
+    "WFA_FindAndReplace20": WFA_FindAndReplace20,
+    "WFA_FindAndReplace40": WFA_FindAndReplace40,
+    "WFA_FindAndReplace60": WFA_FindAndReplace60,
+    "WFA_TextIndexSwitch": WFA_TextIndexSwitch,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WA_FindAndReplace20": "WFA Find & Replace 20 ⚡ (WFA Suite)",
-    "WA_FindAndReplace40": "WFA Find & Replace 40 ⚡ (WFA Suite)",
-    "WA_FindAndReplace60": "WFA Find & Replace 60 ⚡ (WFA Suite)",
-    "WA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
+    "WFA_FindAndReplace20": "WFA Find & Replace 20 ⚡ (WFA Suite)",
+    "WFA_FindAndReplace40": "WFA Find & Replace 40 ⚡ (WFA Suite)",
+    "WFA_FindAndReplace60": "WFA Find & Replace 60 ⚡ (WFA Suite)",
+    "WFA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
 }

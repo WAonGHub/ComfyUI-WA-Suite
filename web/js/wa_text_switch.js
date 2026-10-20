@@ -381,10 +381,12 @@ function tryAttachWhenMounted(node) {
     return textarea?.dataset.waEnhanced === "true";
 }
 
+const TARGET_CLASSES = new Set(["WFA_TextIndexSwitch", "WA_TextIndexSwitch"]);
+
 app.registerExtension({
-    name: "WA.TextIndexSwitch",
+    name: "WFA.TextIndexSwitch",
     async nodeCreated(node) {
-        if (node.comfyClass !== "WA_TextIndexSwitch" && node.type !== "WA_TextIndexSwitch") return;
+        if (!TARGET_CLASSES.has(node.comfyClass) && !TARGET_CLASSES.has(node.type)) return;
         let attempts = 0;
         const pollMount = () => {
             if (tryAttachWhenMounted(node) || attempts > 60) return;
@@ -394,7 +396,7 @@ app.registerExtension({
         setTimeout(pollMount, 50);
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== "WA_TextIndexSwitch") return;
+        if (!TARGET_CLASSES.has(nodeData.name)) return;
 
         const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {

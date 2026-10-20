@@ -4,9 +4,9 @@ NUM_INPUTS = 100
 START_INDEX = 0  # Change to 1 if you prefer 1-100 instead of 0-99
 
 
-class WA_OmniSwitch100:
+class WFA_IndexSwitch100:
     """
-    WA OmniSwitch 100: A 100-input wildcard Index Switch for ComfyUI.
+    WFA Index Switch 100: A 100-input wildcard Index Switch for ComfyUI.
     Uses ComfyUI's lazy evaluation so ONLY the upstream branch connected
     to the active index is executed. All other 99 branches are completely ignored.
     """
@@ -53,9 +53,9 @@ class WA_OmniSwitch100:
 
 
 NODE_CLASS_MAPPINGS = {
-    "WA_OmniSwitch100": WA_OmniSwitch100,
+    "WFA_IndexSwitch100": WFA_IndexSwitch100,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WA_OmniSwitch100": "WFA Index Switch 100 ⚡ (WFA Suite)",
+    "WFA_IndexSwitch100": "WFA Index Switch 100 ⚡ (WFA Suite)",
 }
