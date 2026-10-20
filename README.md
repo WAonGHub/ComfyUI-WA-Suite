@@ -27,7 +27,10 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
 - **Features**:
   - **Row Number Gutter (`0`, `1`, `2`, …)**: Displays line indices directly next to the text box so you never have to manually type `/*0*/`, `/*1*/`, etc.
   - **Alternating Dark Grey & Light Grey Rows**: Zebra-striped row backgrounds that automatically expand if a long prompt wraps onto multiple visual lines.
-  - **Click-to-Select & Active Row Highlighting**: Clicking any row number in the left gutter sets `select` to that index, and the active `select` row is highlighted in green.
+  - **Click-to-Select, Insert & Delete Rows**:
+    - **Click** a row number in the left gutter to set `select` to that index.
+    - **Ctrl + Click** a row number to insert a new blank row there and push all rows below it down by 1.
+    - **Shift + Click** (or **Alt + Click**) a row number to delete that row and pull all rows below it up by 1.
   - **Backwards-Compatible Paste (`strip_comment_index`)**: Automatically strips leading `/*0*/`, `/*1*/` prefixes if you paste prompts from older selector nodes.
 
 ### 4. `WFA Full Image Refiners ⚡ (WFA Suite)`

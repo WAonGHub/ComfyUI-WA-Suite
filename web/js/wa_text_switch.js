@@ -240,6 +240,27 @@ function buildRowListEditor(node, masterTextarea) {
         }
     }
 
+    function insertRowAt(index) {
+        for (let k = TOTAL_ROWS - 1; k > index; k--) {
+            cellInputs[k].value = cellInputs[k - 1].value;
+            autoResizeCell(cellInputs[k]);
+        }
+        cellInputs[index].value = "";
+        autoResizeCell(cellInputs[index]);
+        syncToMasterTextarea();
+        cellInputs[index].focus();
+    }
+
+    function deleteRowAt(index) {
+        for (let k = index; k < TOTAL_ROWS - 1; k++) {
+            cellInputs[k].value = cellInputs[k + 1].value;
+            autoResizeCell(cellInputs[k]);
+        }
+        cellInputs[TOTAL_ROWS - 1].value = "";
+        autoResizeCell(cellInputs[TOTAL_ROWS - 1]);
+        syncToMasterTextarea();
+    }
+
     const fragment = document.createDocumentFragment();
 
     for (let i = 0; i < TOTAL_ROWS; i++) {
@@ -249,10 +270,21 @@ function buildRowListEditor(node, masterTextarea) {
         const gutterEl = document.createElement("div");
         gutterEl.className = "wa-ts-gutter-cell";
         gutterEl.textContent = `${i}`;
-        gutterEl.title = `Row ${i} — Click to set select = ${i}`;
+        gutterEl.title = `Row ${i}\n• Click: Set select = ${i}\n• Ctrl+Click: Insert new row here (push below down)\n• Shift+Click (or Alt+Click): Delete row (pull below up)`;
         gutterEl.addEventListener("mousedown", (e) => {
             e.preventDefault();
             e.stopPropagation();
+
+            if (e.ctrlKey || e.metaKey) {
+                insertRowAt(i);
+                return;
+            }
+
+            if (e.shiftKey || e.altKey) {
+                deleteRowAt(i);
+                return;
+            }
+
             const selectWidget = node.widgets?.find((w) => w.name === "select");
             if (selectWidget) {
                 selectWidget.value = i;
