@@ -228,33 +228,88 @@ function buildRowListEditor(node, masterTextarea) {
         updateSelectedRowHighlight();
     }
 
-    function getSelectedRow() {
-        if (node.inputs) {
-            const selSlot = node.inputs.findIndex((inp) => inp?.name === "select");
-            if (selSlot >= 0 && typeof node.getInputLink === "function") {
+    let lastHighlightedRow = -1;
+
+    function resolveUpstreamIntValue(startNode, inputName) {
+        let curNode = startNode;
+        const graph = startNode.graph || app.graph;
+        if (!graph) return null;
+
+        for (let depth = 0; depth < 10 && curNode; depth++) {
+            const slotIdx =
+                depth === 0
+                    ? curNode.inputs?.findIndex((inp) => inp?.name === inputName) ?? -1
+                    : 0;
+            if (slotIdx < 0) break;
+
+            let link = null;
+            if (typeof curNode.getInputLink === "function") {
                 try {
-                    const link = node.getInputLink(selSlot);
-                    const graph = node.graph || app.graph;
-                    const originNode = link && graph ? graph.getNodeById(link.origin_id) : null;
-                    const upWidget = originNode?.widgets?.find(
-                        (w) => w.name === "select" || w.name === "index" || w.name === "value"
-                    );
-                    if (upWidget != null && upWidget.value != null) {
-                        return Number(upWidget.value) || 0;
-                    }
+                    link = curNode.getInputLink(slotIdx);
                 } catch (_) {}
             }
+            if (!link) {
+                const linkId = curNode.inputs?.[slotIdx]?.link;
+                if (linkId != null && typeof graph.getLink === "function") {
+                    link = graph.getLink(linkId);
+                }
+            }
+            if (!link) break;
+
+            const originNode = graph.getNodeById(link.origin_id);
+            if (!originNode) break;
+
+            // If it's a Reroute node, keep walking upstream
+            if (
+                originNode.type === "Reroute" ||
+                originNode.comfyClass === "Reroute" ||
+                (!originNode.widgets?.length && originNode.inputs?.length === 1)
+            ) {
+                curNode = originNode;
+                continue;
+            }
+
+            // If upstream node is another WFA Text Index Switch whose 'select' is also wired, keep walking
+            if (
+                (originNode.comfyClass === "WFA_TextIndexSwitch" ||
+                    originNode.comfyClass === "WA_TextIndexSwitch") &&
+                originNode.inputs?.some((inp) => inp?.name === "select" && inp?.link != null)
+            ) {
+                curNode = originNode;
+                inputName = "select";
+                continue;
+            }
+
+            if (originNode.widgets) {
+                const upWidget = originNode.widgets.find(
+                    (w) => w.name === "select" || w.name === "index" || w.name === "value" || w.type === "number"
+                );
+                if (upWidget != null && upWidget.value != null) {
+                    return Number(upWidget.value) || 0;
+                }
+            }
+            break;
         }
+        return null;
+    }
+
+    function getSelectedRow() {
+        const upstreamVal = resolveUpstreamIntValue(node, "select");
+        if (upstreamVal !== null) return upstreamVal;
         const selectWidget = node.widgets?.find((w) => w.name === "select");
         return selectWidget ? Number(selectWidget.value) || 0 : 0;
     }
 
-    function updateSelectedRowHighlight() {
+    function updateSelectedRowHighlight(force = false) {
         const sel = getSelectedRow();
+        if (!force && sel === lastHighlightedRow) return;
+        lastHighlightedRow = sel;
         for (let i = 0; i < rowEls.length; i++) {
             rowEls[i].classList.toggle("wa-selected", i === sel);
         }
     }
+
+    node._waUpdateSelectedHighlight = updateSelectedRowHighlight;
 
     function insertRowAt(index) {
         for (let k = TOTAL_ROWS - 1; k > index; k--) {
@@ -457,6 +512,7 @@ app.registerExtension({
         nodeType.prototype.onDrawForeground = function () {
             if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
             tryAttachWhenMounted(this);
+            this._waUpdateSelectedHighlight?.();
         };
     },
 });

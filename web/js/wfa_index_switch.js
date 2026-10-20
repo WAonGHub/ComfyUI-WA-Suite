@@ -135,21 +135,49 @@ function getRowGeometry(node, rowIdx) {
 }
 
 function getActiveSwitchIndex(node) {
-    // If 'index' is connected to an upstream node (e.g. WFA Text Index Switch), follow its live value
-    if (node.inputs) {
-        const idxSlot = node.inputs.findIndex((inp) => inp?.name === "index");
-        if (idxSlot >= 0 && isSlotConnected(node, idxSlot)) {
-            const linkInfo = getLinkInfoForSlot(node, idxSlot);
-            const graph = node.graph || app.graph;
-            const originNode = linkInfo && graph ? graph.getNodeById(linkInfo.origin_id) : null;
-            if (originNode?.widgets) {
+    // If 'index' is connected to an upstream node (even through Reroutes or chained switches), follow its live value
+    const graph = node.graph || app.graph;
+    if (node.inputs && graph) {
+        let curNode = node;
+        let targetInputName = "index";
+        for (let depth = 0; depth < 10 && curNode; depth++) {
+            const slotIdx =
+                depth === 0
+                    ? curNode.inputs?.findIndex((inp) => inp?.name === targetInputName) ?? -1
+                    : 0;
+            if (slotIdx < 0 || !isSlotConnected(curNode, slotIdx)) break;
+            const linkInfo = getLinkInfoForSlot(curNode, slotIdx);
+            const originNode = linkInfo ? graph.getNodeById(linkInfo.origin_id) : null;
+            if (!originNode) break;
+
+            if (
+                originNode.type === "Reroute" ||
+                originNode.comfyClass === "Reroute" ||
+                (!originNode.widgets?.length && originNode.inputs?.length === 1)
+            ) {
+                curNode = originNode;
+                continue;
+            }
+
+            if (
+                (originNode.comfyClass === "WFA_TextIndexSwitch" ||
+                    originNode.comfyClass === "WA_TextIndexSwitch") &&
+                originNode.inputs?.some((inp) => inp?.name === "select" && inp?.link != null)
+            ) {
+                curNode = originNode;
+                targetInputName = "select";
+                continue;
+            }
+
+            if (originNode.widgets) {
                 const upWidget = originNode.widgets.find(
-                    (w) => w.name === "select" || w.name === "index" || w.name === "value"
+                    (w) => w.name === "select" || w.name === "index" || w.name === "value" || w.type === "number"
                 );
                 if (upWidget != null && upWidget.value != null) {
                     return Number(upWidget.value) || 0;
                 }
             }
+            break;
         }
     }
     const w = node.widgets?.find((w) => w.name === "index");
