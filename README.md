@@ -29,6 +29,15 @@ High-performance utility node suite for ComfyUI by **WA**.
   - **Click-to-Select & Active Row Highlighting**: Clicking any row number in the left gutter sets `select` to that index, and the active `select` row is highlighted in green.
   - **Backwards-Compatible Paste (`strip_comment_index`)**: Automatically strips leading `/*0*/`, `/*1*/` prefixes if you paste prompts from older selector nodes.
 
+### 4. `WA Full Image Refiners ⚡ (WA Suite)`
+- **Category**: `WA Node Suite/Refiners`
+- **Included Refiner Nodes (Standard + `BASIC_PIPE` Variants)**:
+  - `WA Full Image Refiner ⚡ (WA Suite)` & `(Pipe)`
+  - `WA Advanced Full Image Refiner ⚡ (WA Suite)` & `(Pipe)` — Adds pre-sharpening (unsharp mask) and pre-refinement bicubic upscale/downscale.
+  - `WA Exact Impact Refiner ⚡ (WA Suite)` & `(Pipe)` — Emulates Impact Pack's full-image crop refinement with differential diffusion and `InpaintModelConditioning` support.
+  - `WA Edge-Targeted Refiner ⚡ (WA Suite)` & `(Pipe)` — Generates a Sobel edge mask (`EDGE_MASK`) to focus refinement on edges and details.
+  - `WA Smart Mask Refiner ⚡ (WA Suite)` & `(Pipe)` — Combines Sobel edge detection, morphological dilation, base mask level, and Gaussian blur (`SMART_MASK`).
+
 ## Installation
 
 ### Via ComfyUI-Manager
