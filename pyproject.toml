@@ -1,7 +1,7 @@
 [project]
 name = "comfyui-wa-suite"
 description = "WFA Node Suite (WaifuArchitect) for ComfyUI: High-performance utility and refiner nodes including a 100-input lazy wildcard Index Switch, 20/40/60 Find & Replace, numbered Text Index Switch, and Full-Image Impact-style Refiners."
-version = "1.2.1"
+version = "1.3.0"
 authors = [{ name = "WA" }]
 license = { text = "MIT" }
 dependencies = []

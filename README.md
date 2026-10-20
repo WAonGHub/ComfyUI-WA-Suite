@@ -8,8 +8,14 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
 ### 1. `WFA Index Switch 100 ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Switches`
 - **Features**:
-  - **100 Wildcard Inputs (`input_0` … `input_99`)**: Accepts any data type (`MODEL`, `LATENT`, `IMAGE`, `STRING`, `CONDITIONING`, `CLIP`, `VAE`, etc.).
+  - **100 Wildcard Inputs (`0` … `99`)**: Accepts any data type (`MODEL`, `LATENT`, `IMAGE`, `STRING`, `CONDITIONING`, `CLIP`, `VAE`, etc.).
   - **True Lazy Evaluation**: Uses ComfyUI's native `check_lazy_status` so **only** the upstream branch connected to the selected `index` is executed. All other 99 branches are completely ignored.
+  - **Numbered Gutter & Alternating Dark/Light Grey Rows**: Matches the visual layout of `WFA Text Index Switch` with alternating row shading and active green row indicator.
+  - **Clickable & Writeable Row Labels**: Click any row to type a custom name right next to its connection dot (replaces static `input_28` labels; use `Enter`/`Up`/`Down` to move between rows).
+  - **Wire & Label Reordering Shortcuts**:
+    - **Click** a row number (`0–99`): Sets `index` to that slot.
+    - **`Ctrl + Click`** a row number: Inserts an empty slot at that row and **shifts all connected wires & labels below it down by 1**.
+    - **`Shift + Click`** (or **`Alt + Click`**) a row number: Deletes that row and **pulls all connected wires & labels below it up by 1**.
 
 ### 2. `WFA Find & Replace (20 / 40 / 60) ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Strings`
