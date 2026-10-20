@@ -2,9 +2,9 @@ import { app } from "../../../scripts/app.js";
 
 const SWITCH_CLASSES = new Set(["WFA_IndexSwitch100", "WA_OmniSwitch100"]);
 const NUM_INPUTS = 100;
-const SOCKET_ZONE_W = 18;
+const SOCKET_ZONE_W = 24;
 const GUTTER_W = 32;
-const LABEL_START_X = SOCKET_ZONE_W + GUTTER_W; // 50px
+const LABEL_START_X = SOCKET_ZONE_W + GUTTER_W; // 56px
 
 let activeInlineInput = null;
 
@@ -15,8 +15,20 @@ function closeInlineInput() {
     }
 }
 
-function getLinkRecord(graph, linkId) {
+function getLinkInfoForSlot(node, slotIdx) {
+    if (slotIdx < 0 || !node.inputs) return null;
+    if (typeof node.getInputLink === "function") {
+        try {
+            const link = node.getInputLink(slotIdx);
+            if (link) return link;
+        } catch (_) {}
+    }
+    const graph = node.graph || app.graph;
+    const linkId = node.inputs[slotIdx]?.link;
     if (linkId == null || !graph) return null;
+    if (typeof graph.getLink === "function") {
+        return graph.getLink(linkId) || null;
+    }
     if (graph._links instanceof Map) {
         return graph._links.get(linkId) || null;
     }
@@ -29,20 +41,38 @@ function getLinkRecord(graph, linkId) {
     return null;
 }
 
+function isSlotConnected(node, slotIdx) {
+    if (slotIdx < 0 || !node.inputs) return false;
+    if (typeof node.isInputConnected === "function") {
+        try {
+            return !!node.isInputConnected(slotIdx);
+        } catch (_) {}
+    }
+    return getLinkInfoForSlot(node, slotIdx) != null;
+}
+
 function moveInputWire(node, fromSlotIdx, toSlotIdx) {
-    if (fromSlotIdx < 0 || toSlotIdx < 0 || !node.inputs) return;
-    const fromInput = node.inputs[fromSlotIdx];
-    const toInput = node.inputs[toSlotIdx];
-    if (!fromInput || !toInput) return;
+    if (fromSlotIdx < 0 || toSlotIdx < 0 || fromSlotIdx === toSlotIdx || !node.inputs) return;
+    const graph = node.graph || app.graph;
+    if (!graph) return;
 
-    const linkId = fromInput.link;
-    toInput.link = linkId ?? null;
-    fromInput.link = null;
+    // 1. Capture the connection currently at fromSlotIdx before disconnecting anything
+    const linkInfo = getLinkInfoForSlot(node, fromSlotIdx);
+    const originId = linkInfo ? linkInfo.origin_id : null;
+    const originSlot = linkInfo ? linkInfo.origin_slot : null;
+    const parentId = linkInfo ? linkInfo.parentId : undefined;
 
-    if (linkId != null) {
-        const linkRec = getLinkRecord(node.graph || app.graph, linkId);
-        if (linkRec) {
-            linkRec.target_slot = toSlotIdx;
+    // 2. Disconnect destination slot if it currently has a wire
+    if (isSlotConnected(node, toSlotIdx)) {
+        node.disconnectInput(toSlotIdx);
+    }
+
+    // 3. Disconnect source slot and reconnect upstream node to destination slot
+    if (linkInfo && originId != null && originSlot != null) {
+        node.disconnectInput(fromSlotIdx);
+        const originNode = graph.getNodeById(originId);
+        if (originNode && typeof originNode.connect === "function") {
+            originNode.connect(originSlot, node, toSlotIdx, parentId);
         }
     }
 }
@@ -63,7 +93,6 @@ function silenceDefaultInputNames(node) {
     for (let i = 0; i < node.inputs.length; i++) {
         const inp = node.inputs[i];
         if (inp && inp.name && inp.name.startsWith("input_")) {
-            // Single space hides default "input_28" text so we can draw our custom gutter + label
             if (inp.label !== " ") {
                 inp.label = " ";
             }
@@ -123,10 +152,10 @@ function insertSwitchRowAt(node, index) {
     closeInlineInput();
     const labels = ensureRowLabelsArray(node);
 
-    // If the very last slot (99) has a wire, disconnect it before shifting 98 -> 99
+    // Disconnect slot 99 if occupied before shifting 98 -> 99
     const lastSlot = getSlotIndexForRow(node, NUM_INPUTS - 1);
-    if (lastSlot >= 0 && node.inputs[lastSlot]?.link != null) {
-        node.disconnectInput?.(lastSlot);
+    if (lastSlot >= 0 && isSlotConnected(node, lastSlot)) {
+        node.disconnectInput(lastSlot);
     }
 
     for (let k = NUM_INPUTS - 1; k > index; k--) {
@@ -138,6 +167,7 @@ function insertSwitchRowAt(node, index) {
 
     labels[index] = "";
     node.setDirtyCanvas?.(true, true);
+    app.graph?.setDirtyCanvas?.(true, true);
 }
 
 function deleteSwitchRowAt(node, index) {
@@ -145,8 +175,8 @@ function deleteSwitchRowAt(node, index) {
     const labels = ensureRowLabelsArray(node);
 
     const targetSlot = getSlotIndexForRow(node, index);
-    if (targetSlot >= 0 && node.inputs[targetSlot]?.link != null) {
-        node.disconnectInput?.(targetSlot);
+    if (targetSlot >= 0 && isSlotConnected(node, targetSlot)) {
+        node.disconnectInput(targetSlot);
     }
 
     for (let k = index; k < NUM_INPUTS - 1; k++) {
@@ -158,6 +188,7 @@ function deleteSwitchRowAt(node, index) {
 
     labels[NUM_INPUTS - 1] = "";
     node.setDirtyCanvas?.(true, true);
+    app.graph?.setDirtyCanvas?.(true, true);
 }
 
 function openInlineLabelEditor(node, rowIdx, graphCanvas) {
@@ -277,8 +308,123 @@ function openInlineLabelEditor(node, rowIdx, graphCanvas) {
     });
 }
 
+function hitTestSwitchRow(clientX, clientY) {
+    const graphCanvas = app.canvas;
+    const canvasEl = graphCanvas?.canvas;
+    const ds = graphCanvas?.ds;
+    const nodes = app.graph?._nodes;
+    if (!canvasEl || !ds || !nodes) return null;
+
+    const rect = canvasEl.getBoundingClientRect();
+    const scale = ds.scale || 1;
+    const offset = ds.offset || [0, 0];
+
+    const graphX = (clientX - rect.left) / scale - offset[0];
+    const graphY = (clientY - rect.top) / scale - offset[1];
+
+    // Check from top-most node to bottom-most
+    for (let idx = nodes.length - 1; idx >= 0; idx--) {
+        const node = nodes[idx];
+        if (!SWITCH_CLASSES.has(node.comfyClass) && !SWITCH_CLASSES.has(node.type)) continue;
+        if (node.flags?.collapsed) continue;
+
+        const lx = graphX - node.pos[0];
+        const ly = graphY - node.pos[1];
+
+        if (lx < SOCKET_ZONE_W || lx > node.size[0] || ly < 0 || ly > node.size[1]) {
+            continue;
+        }
+
+        for (let i = 0; i < NUM_INPUTS; i++) {
+            const geom = getRowGeometry(node, i);
+            if (!geom) continue;
+            if (ly >= geom.topY && ly <= geom.topY + geom.rowH) {
+                if (i === 0 && lx > node.size[0] - 60) return null;
+                return {
+                    node,
+                    rowIdx: i,
+                    inGutter: lx <= LABEL_START_X,
+                    lx,
+                    ly,
+                };
+            }
+        }
+    }
+    return null;
+}
+
 app.registerExtension({
     name: "WFA.IndexSwitch100",
+    async setup() {
+        // 1. Capture-phase pointerdown so Ctrl+Click and Shift/Alt+Click are not swallowed by ComfyUI's canvas panning/selection
+        window.addEventListener(
+            "pointerdown",
+            (e) => {
+                if (e.button !== 0) return;
+                const canvasEl = app.canvas?.canvas;
+                if (!canvasEl || e.target !== canvasEl) return;
+
+                const hit = hitTestSwitchRow(e.clientX, e.clientY);
+                if (!hit) return;
+
+                const { node, rowIdx, inGutter } = hit;
+
+                if (inGutter) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    e.stopImmediatePropagation();
+
+                    if (e.ctrlKey || e.metaKey) {
+                        insertSwitchRowAt(node, rowIdx);
+                        openInlineLabelEditor(node, rowIdx, app.canvas);
+                    } else if (e.shiftKey || e.altKey) {
+                        deleteSwitchRowAt(node, rowIdx);
+                    } else {
+                        setActiveSwitchIndex(node, rowIdx);
+                    }
+                    return;
+                }
+
+                // Clicked in the label area
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+
+                if (e.ctrlKey || e.metaKey) {
+                    insertSwitchRowAt(node, rowIdx);
+                }
+                openInlineLabelEditor(node, rowIdx, app.canvas);
+            },
+            true
+        );
+
+        // 2. Hover tooltip on the canvas when hovering over row numbers or labels
+        let lastTooltipRow = -1;
+        window.addEventListener(
+            "pointermove",
+            (e) => {
+                const canvasEl = app.canvas?.canvas;
+                if (!canvasEl || e.target !== canvasEl) return;
+
+                const hit = hitTestSwitchRow(e.clientX, e.clientY);
+                if (hit && hit.inGutter) {
+                    if (lastTooltipRow !== hit.rowIdx) {
+                        lastTooltipRow = hit.rowIdx;
+                        canvasEl.title = `Row ${hit.rowIdx}\n• Click: Set index = ${hit.rowIdx}\n• Ctrl+Click: Insert new row here (push wires & labels down)\n• Shift+Click (or Alt+Click): Delete row (pull wires & labels up)`;
+                    }
+                } else if (hit && !hit.inGutter) {
+                    if (lastTooltipRow !== 1000 + hit.rowIdx) {
+                        lastTooltipRow = 1000 + hit.rowIdx;
+                        canvasEl.title = `Row ${hit.rowIdx} — Click to rename`;
+                    }
+                } else if (lastTooltipRow !== -1) {
+                    lastTooltipRow = -1;
+                    canvasEl.title = "";
+                }
+            },
+            { passive: true }
+        );
+    },
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (!SWITCH_CLASSES.has(nodeData.name)) return;
 
@@ -301,7 +447,6 @@ app.registerExtension({
             return res;
         };
 
-        // Draw alternating dark/light grey rows BEFORE LiteGraph draws the green socket dots
         const origOnDrawBackground = nodeType.prototype.onDrawBackground;
         nodeType.prototype.onDrawBackground = function (ctx) {
             if (origOnDrawBackground) origOnDrawBackground.apply(this, arguments);
@@ -322,11 +467,10 @@ app.registerExtension({
                 ctx.fillStyle = i % 2 === 0 ? "#1c1c20" : "#2f2f37";
                 ctx.fillRect(0, topY, nodeW, rowH);
 
-                // Gutter cell background (between socket dot and label area)
+                // Gutter cell background
                 if (i === activeIdx) {
                     ctx.fillStyle = "rgba(74, 222, 128, 0.18)";
                     ctx.fillRect(SOCKET_ZONE_W, topY, GUTTER_W, rowH);
-                    // Green active indicator bar
                     ctx.fillStyle = "#4ade80";
                     ctx.fillRect(SOCKET_ZONE_W, topY, 3, rowH);
                 } else {
@@ -352,7 +496,6 @@ app.registerExtension({
             ctx.restore();
         };
 
-        // Draw row numbers (0..99) and custom writeable labels AFTER socket dots
         const origOnDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function (ctx) {
             if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
@@ -399,7 +542,6 @@ app.registerExtension({
                     ctx.fillStyle = i === activeIdx ? "#ffffff" : "#e4e4e7";
                     ctx.fillText(customText, LABEL_START_X + 8, centerY);
                 } else {
-                    // Subtle placeholder when empty instead of static "input_28"
                     ctx.font = '11px "JetBrains Mono", "Consolas", "Monaco", monospace';
                     ctx.fillStyle = "rgba(255, 255, 255, 0.16)";
                     ctx.fillText("—", LABEL_START_X + 8, centerY);
@@ -408,52 +550,6 @@ app.registerExtension({
             }
 
             ctx.restore();
-        };
-
-        const origOnMouseDown = nodeType.prototype.onMouseDown;
-        nodeType.prototype.onMouseDown = function (e, localPos, graphCanvas) {
-            if (!this.flags?.collapsed && localPos) {
-                const [lx, ly] = localPos;
-
-                // Keep left socket connection zone (< SOCKET_ZONE_W) and row-0 output socket untouched
-                if (lx >= SOCKET_ZONE_W) {
-                    for (let i = 0; i < NUM_INPUTS; i++) {
-                        const geom = getRowGeometry(this, i);
-                        if (!geom) continue;
-
-                        if (ly >= geom.topY && ly <= geom.topY + geom.rowH) {
-                            // Do not intercept clicks on the 'output' socket on row 0
-                            if (i === 0 && lx > this.size[0] - 60) {
-                                break;
-                            }
-
-                            // Clicked inside the Row Number Gutter (SOCKET_ZONE_W .. LABEL_START_X)
-                            if (lx <= LABEL_START_X) {
-                                if (e.ctrlKey || e.metaKey) {
-                                    insertSwitchRowAt(this, i);
-                                    openInlineLabelEditor(this, i, graphCanvas);
-                                } else if (e.shiftKey || e.altKey) {
-                                    deleteSwitchRowAt(this, i);
-                                } else {
-                                    setActiveSwitchIndex(this, i);
-                                }
-                                return true;
-                            }
-
-                            // Clicked inside the Label Area (> LABEL_START_X)
-                            if (e.ctrlKey || e.metaKey) {
-                                insertSwitchRowAt(this, i);
-                                openInlineLabelEditor(this, i, graphCanvas);
-                                return true;
-                            }
-                            openInlineLabelEditor(this, i, graphCanvas);
-                            return true;
-                        }
-                    }
-                }
-            }
-
-            return origOnMouseDown ? origOnMouseDown.apply(this, arguments) : false;
         };
     },
 });
