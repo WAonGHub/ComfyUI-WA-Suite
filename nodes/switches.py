@@ -57,5 +57,5 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WA_OmniSwitch100": "WA Index Switch 100 ⚡ (WA Suite)",
+    "WA_OmniSwitch100": "WFA Index Switch 100 ⚡ (WFA Suite)",
 }

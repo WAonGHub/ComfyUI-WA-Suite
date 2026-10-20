@@ -711,14 +711,14 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WA_FullImageRefiner": "WA Full Image Refiner ⚡ (WA Suite)",
-    "WA_FullImageRefinerPipe": "WA Full Image Refiner (Pipe) ⚡ (WA Suite)",
-    "WA_AdvancedFullImageRefiner": "WA Advanced Full Image Refiner ⚡ (WA Suite)",
-    "WA_AdvancedFullImageRefinerPipe": "WA Advanced Full Image Refiner (Pipe) ⚡ (WA Suite)",
-    "WA_ExactImpactRefiner": "WA Exact Impact Refiner ⚡ (WA Suite)",
-    "WA_ExactImpactRefinerPipe": "WA Exact Impact Refiner (Pipe) ⚡ (WA Suite)",
-    "WA_EdgeTargetedRefiner": "WA Edge-Targeted Refiner ⚡ (WA Suite)",
-    "WA_EdgeTargetedRefinerPipe": "WA Edge-Targeted Refiner (Pipe) ⚡ (WA Suite)",
-    "WA_SmartMaskRefiner": "WA Smart Mask Refiner ⚡ (WA Suite)",
-    "WA_SmartMaskRefinerPipe": "WA Smart Mask Refiner (Pipe) ⚡ (WA Suite)",
+    "WA_FullImageRefiner": "WFA Full Image Refiner ⚡ (WFA Suite)",
+    "WA_FullImageRefinerPipe": "WFA Full Image Refiner (Pipe) ⚡ (WFA Suite)",
+    "WA_AdvancedFullImageRefiner": "WFA Advanced Full Image Refiner ⚡ (WFA Suite)",
+    "WA_AdvancedFullImageRefinerPipe": "WFA Advanced Full Image Refiner (Pipe) ⚡ (WFA Suite)",
+    "WA_ExactImpactRefiner": "WFA Exact Impact Refiner ⚡ (WFA Suite)",
+    "WA_ExactImpactRefinerPipe": "WFA Exact Impact Refiner (Pipe) ⚡ (WFA Suite)",
+    "WA_EdgeTargetedRefiner": "WFA Edge-Targeted Refiner ⚡ (WFA Suite)",
+    "WA_EdgeTargetedRefinerPipe": "WFA Edge-Targeted Refiner (Pipe) ⚡ (WFA Suite)",
+    "WA_SmartMaskRefiner": "WFA Smart Mask Refiner ⚡ (WFA Suite)",
+    "WA_SmartMaskRefinerPipe": "WFA Smart Mask Refiner (Pipe) ⚡ (WFA Suite)",
 }

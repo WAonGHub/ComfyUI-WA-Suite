@@ -229,8 +229,8 @@ NODE_CLASS_MAPPINGS = {
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "WA_FindAndReplace20": "WA Find & Replace 20 ⚡ (WA Suite)",
-    "WA_FindAndReplace40": "WA Find & Replace 40 ⚡ (WA Suite)",
-    "WA_FindAndReplace60": "WA Find & Replace 60 ⚡ (WA Suite)",
-    "WA_TextIndexSwitch": "WA Text Index Switch ⚡ (WA Suite)",
+    "WA_FindAndReplace20": "WFA Find & Replace 20 ⚡ (WFA Suite)",
+    "WA_FindAndReplace40": "WFA Find & Replace 40 ⚡ (WFA Suite)",
+    "WA_FindAndReplace60": "WFA Find & Replace 60 ⚡ (WFA Suite)",
+    "WA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
 }

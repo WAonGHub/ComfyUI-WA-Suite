@@ -1,4 +1,4 @@
-SUITE_CATEGORY = "WA Node Suite"
+SUITE_CATEGORY = "WFA Node Suite"
 
 
 class AnyType(str):
