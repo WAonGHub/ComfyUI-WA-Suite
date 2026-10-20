@@ -1,12 +1,29 @@
 import { app } from "../../../scripts/app.js";
 
-const SWITCH_CLASSES = new Set(["WFA_IndexSwitch100", "WA_OmniSwitch100"]);
-const NUM_INPUTS = 100;
+const SIZES = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+const SWITCH_VARIANTS = SIZES.map((count) => ({
+    type: `WFA_IndexSwitch${count}`,
+    count,
+    label: `WFA Index Switch ${count} ⚡`,
+}));
+
+const SWITCH_CLASSES = new Set([
+    ...SIZES.map((c) => `WFA_IndexSwitch${c}`),
+    "WA_OmniSwitch100",
+]);
+
 const SOCKET_ZONE_W = 24;
 const GUTTER_W = 32;
 const LABEL_START_X = SOCKET_ZONE_W + GUTTER_W; // 56px
 
 let activeInlineInput = null;
+
+function getNumInputs(node) {
+    const cls = node?.comfyClass || node?.type || "";
+    const match = cls.match(/(\d+)$/);
+    return match ? Number(match[1]) : 100;
+}
 
 function closeInlineInput() {
     if (activeInlineInput) {
@@ -56,18 +73,15 @@ function moveInputWire(node, fromSlotIdx, toSlotIdx) {
     const graph = node.graph || app.graph;
     if (!graph) return;
 
-    // 1. Capture the connection currently at fromSlotIdx before disconnecting anything
     const linkInfo = getLinkInfoForSlot(node, fromSlotIdx);
     const originId = linkInfo ? linkInfo.origin_id : null;
     const originSlot = linkInfo ? linkInfo.origin_slot : null;
     const parentId = linkInfo ? linkInfo.parentId : undefined;
 
-    // 2. Disconnect destination slot if it currently has a wire
     if (isSlotConnected(node, toSlotIdx)) {
         node.disconnectInput(toSlotIdx);
     }
 
-    // 3. Disconnect source slot and reconnect upstream node to destination slot
     if (linkInfo && originId != null && originSlot != null) {
         node.disconnectInput(fromSlotIdx);
         const originNode = graph.getNodeById(originId);
@@ -78,11 +92,12 @@ function moveInputWire(node, fromSlotIdx, toSlotIdx) {
 }
 
 function ensureRowLabelsArray(node) {
+    const numInputs = getNumInputs(node);
     node.properties = node.properties || {};
     if (!Array.isArray(node.properties.rowLabels)) {
-        node.properties.rowLabels = new Array(NUM_INPUTS).fill("");
+        node.properties.rowLabels = new Array(numInputs).fill("");
     }
-    while (node.properties.rowLabels.length < NUM_INPUTS) {
+    while (node.properties.rowLabels.length < numInputs) {
         node.properties.rowLabels.push("");
     }
     return node.properties.rowLabels;
@@ -135,7 +150,6 @@ function getRowGeometry(node, rowIdx) {
 }
 
 function getActiveSwitchIndex(node) {
-    // If 'index' is connected to an upstream node (even through Reroutes or chained switches), follow its live value
     const graph = node.graph || app.graph;
     if (node.inputs && graph) {
         let curNode = node;
@@ -195,15 +209,15 @@ function setActiveSwitchIndex(node, newIdx) {
 
 function insertSwitchRowAt(node, index) {
     closeInlineInput();
+    const numInputs = getNumInputs(node);
     const labels = ensureRowLabelsArray(node);
 
-    // Disconnect slot 99 if occupied before shifting 98 -> 99
-    const lastSlot = getSlotIndexForRow(node, NUM_INPUTS - 1);
+    const lastSlot = getSlotIndexForRow(node, numInputs - 1);
     if (lastSlot >= 0 && isSlotConnected(node, lastSlot)) {
         node.disconnectInput(lastSlot);
     }
 
-    for (let k = NUM_INPUTS - 1; k > index; k--) {
+    for (let k = numInputs - 1; k > index; k--) {
         const fromSlot = getSlotIndexForRow(node, k - 1);
         const toSlot = getSlotIndexForRow(node, k);
         moveInputWire(node, fromSlot, toSlot);
@@ -217,6 +231,7 @@ function insertSwitchRowAt(node, index) {
 
 function deleteSwitchRowAt(node, index) {
     closeInlineInput();
+    const numInputs = getNumInputs(node);
     const labels = ensureRowLabelsArray(node);
 
     const targetSlot = getSlotIndexForRow(node, index);
@@ -224,21 +239,136 @@ function deleteSwitchRowAt(node, index) {
         node.disconnectInput(targetSlot);
     }
 
-    for (let k = index; k < NUM_INPUTS - 1; k++) {
+    for (let k = index; k < numInputs - 1; k++) {
         const fromSlot = getSlotIndexForRow(node, k + 1);
         const toSlot = getSlotIndexForRow(node, k);
         moveInputWire(node, fromSlot, toSlot);
         labels[k] = labels[k + 1] || "";
     }
 
-    labels[NUM_INPUTS - 1] = "";
+    labels[numInputs - 1] = "";
     node.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
+}
+
+function upgradeIndexSwitchNode(oldNode, targetType) {
+    closeInlineInput();
+    const graph = oldNode.graph || app.graph;
+    if (!graph || !window.LiteGraph) return;
+
+    const newNode = window.LiteGraph.createNode(targetType);
+    if (!newNode) return;
+
+    graph.add(newNode);
+
+    const targetNumInputs = getNumInputs(newNode);
+
+    // 1. Copy position, width, title, colors, and rowLabels
+    newNode.pos = [oldNode.pos[0], oldNode.pos[1]];
+    const targetHeight = Math.max(260, targetNumInputs * 20 + 75);
+    newNode.size = [oldNode.size ? oldNode.size[0] : 300, targetHeight];
+
+    if (
+        oldNode.title &&
+        !oldNode.title.startsWith("WFA Index Switch") &&
+        !oldNode.title.startsWith("WA Index Switch") &&
+        !oldNode.title.startsWith("WA OmniSwitch")
+    ) {
+        newNode.title = oldNode.title;
+    }
+    if (oldNode.color) newNode.color = oldNode.color;
+    if (oldNode.bgcolor) newNode.bgcolor = oldNode.bgcolor;
+    if (oldNode.boxcolor) newNode.boxcolor = oldNode.boxcolor;
+
+    if (oldNode.properties) {
+        newNode.properties = JSON.parse(JSON.stringify(oldNode.properties));
+    }
+    ensureRowLabelsArray(newNode);
+    silenceDefaultInputNames(newNode);
+
+    // 2. Copy widget values (e.g., 'index')
+    if (oldNode.widgets && newNode.widgets) {
+        for (const oldW of oldNode.widgets) {
+            const newW = newNode.widgets.find((w) => w.name === oldW.name);
+            if (newW) {
+                newW.value =
+                    oldW.name === "index"
+                        ? Math.min(Number(oldW.value) || 0, targetNumInputs - 1)
+                        : oldW.value;
+            }
+        }
+    }
+
+    // 3. Transfer all connected incoming wires (input_0..N and index)
+    if (oldNode.inputs) {
+        const incomingConnections = [];
+        for (let i = 0; i < oldNode.inputs.length; i++) {
+            const oldInp = oldNode.inputs[i];
+            if (!oldInp) continue;
+            const linkInfo = getLinkInfoForSlot(oldNode, i);
+            if (linkInfo) {
+                incomingConnections.push({
+                    inputName: oldInp.name,
+                    inputType: oldInp.type || "*",
+                    originId: linkInfo.origin_id,
+                    originSlot: linkInfo.origin_slot,
+                    parentId: linkInfo.parentId,
+                });
+            }
+        }
+
+        for (const conn of incomingConnections) {
+            let newSlotIdx = newNode.findInputSlot ? newNode.findInputSlot(conn.inputName) : -1;
+            if (newSlotIdx === -1 && conn.inputName === "index" && typeof newNode.addInput === "function") {
+                const idxWidget = newNode.widgets?.find((w) => w.name === "index");
+                newNode.addInput("index", "INT", idxWidget ? { widget: { name: "index" } } : undefined);
+                newSlotIdx = newNode.findInputSlot("index");
+            }
+            if (newSlotIdx >= 0) {
+                const originNode = graph.getNodeById(conn.originId);
+                if (originNode && typeof originNode.connect === "function") {
+                    originNode.connect(conn.originSlot, newNode, newSlotIdx, conn.parentId);
+                }
+            }
+        }
+    }
+
+    // 4. Transfer all outgoing wires from 'output'
+    const outgoingConnections = [];
+    const allNodes = graph._nodes || [];
+    for (const targetNode of allNodes) {
+        if (!targetNode || targetNode === oldNode || !targetNode.inputs) continue;
+        for (let s = 0; s < targetNode.inputs.length; s++) {
+            const linkInfo = getLinkInfoForSlot(targetNode, s);
+            if (linkInfo && linkInfo.origin_id === oldNode.id) {
+                outgoingConnections.push({
+                    originSlot: linkInfo.origin_slot,
+                    targetNode,
+                    targetSlot: s,
+                    parentId: linkInfo.parentId,
+                });
+            }
+        }
+    }
+
+    for (const outConn of outgoingConnections) {
+        newNode.connect(outConn.originSlot, outConn.targetNode, outConn.targetSlot, outConn.parentId);
+    }
+
+    silenceDefaultInputNames(newNode);
+
+    // 5. Remove old node and select the new node
+    graph.remove(oldNode);
+    if (app.canvas) {
+        app.canvas.selectNode(newNode);
+        app.canvas.setDirty(true, true);
+    }
 }
 
 function openInlineLabelEditor(node, rowIdx, graphCanvas) {
     closeInlineInput();
 
+    const numInputs = getNumInputs(node);
     const geom = getRowGeometry(node, rowIdx);
     if (!geom) return;
 
@@ -321,7 +451,7 @@ function openInlineLabelEditor(node, rowIdx, graphCanvas) {
             ev.preventDefault();
             const nextRow = rowIdx + 1;
             commitAndClose();
-            if (nextRow < NUM_INPUTS) {
+            if (nextRow < numInputs) {
                 openInlineLabelEditor(node, nextRow, graphCanvas);
             }
         } else if (ev.key === "ArrowUp") {
@@ -367,7 +497,6 @@ function hitTestSwitchRow(clientX, clientY) {
     const graphX = (clientX - rect.left) / scale - offset[0];
     const graphY = (clientY - rect.top) / scale - offset[1];
 
-    // Check from top-most node to bottom-most
     for (let idx = nodes.length - 1; idx >= 0; idx--) {
         const node = nodes[idx];
         if (!SWITCH_CLASSES.has(node.comfyClass) && !SWITCH_CLASSES.has(node.type)) continue;
@@ -380,7 +509,8 @@ function hitTestSwitchRow(clientX, clientY) {
             continue;
         }
 
-        for (let i = 0; i < NUM_INPUTS; i++) {
+        const numInputs = getNumInputs(node);
+        for (let i = 0; i < numInputs; i++) {
             const geom = getRowGeometry(node, i);
             if (!geom) continue;
             if (ly >= geom.topY && ly <= geom.topY + geom.rowH) {
@@ -399,9 +529,8 @@ function hitTestSwitchRow(clientX, clientY) {
 }
 
 app.registerExtension({
-    name: "WFA.IndexSwitch100",
+    name: "WFA.IndexSwitch",
     async setup() {
-        // 1. Capture-phase pointerdown so Ctrl+Click and Shift/Alt+Click are not swallowed by ComfyUI's canvas panning/selection
         window.addEventListener(
             "pointerdown",
             (e) => {
@@ -430,7 +559,6 @@ app.registerExtension({
                     return;
                 }
 
-                // Clicked in the label area
                 e.preventDefault();
                 e.stopPropagation();
                 e.stopImmediatePropagation();
@@ -443,7 +571,6 @@ app.registerExtension({
             true
         );
 
-        // 2. Hover tooltip on the canvas when hovering over row numbers or labels
         let lastTooltipRow = -1;
         window.addEventListener(
             "pointermove",
@@ -476,10 +603,14 @@ app.registerExtension({
         const origOnNodeCreated = nodeType.prototype.onNodeCreated;
         nodeType.prototype.onNodeCreated = function () {
             const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
+            const numInputs = getNumInputs(this);
             ensureRowLabelsArray(this);
             silenceDefaultInputNames(this);
+            const targetHeight = Math.max(260, numInputs * 20 + 75);
             if (!this.size || this.size[0] < 280) {
-                this.size = [300, this.size ? this.size[1] : 2100];
+                this.size = [300, targetHeight];
+            } else {
+                this.size[1] = targetHeight;
             }
             return res;
         };
@@ -492,27 +623,75 @@ app.registerExtension({
             return res;
         };
 
+        // Add right-click menu to expand/shrink (+10 / -10) or convert to any size 10..100
+        const origGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+        nodeType.prototype.getExtraMenuOptions = function (_, options) {
+            if (origGetExtraMenuOptions) {
+                origGetExtraMenuOptions.apply(this, arguments);
+            }
+
+            const curSize = getNumInputs(this);
+            const topMenuItems = [];
+
+            if (curSize != null && curSize + 10 <= 100) {
+                const nextSize = curSize + 10;
+                topMenuItems.push({
+                    content: `⚡ Expand +10 Inputs (to ${nextSize})`,
+                    callback: () => upgradeIndexSwitchNode(this, `WFA_IndexSwitch${nextSize}`),
+                });
+            }
+            if (curSize != null && curSize - 10 >= 10) {
+                const prevSize = curSize - 10;
+                topMenuItems.push({
+                    content: `⚡ Shrink -10 Inputs (to ${prevSize})`,
+                    callback: () => upgradeIndexSwitchNode(this, `WFA_IndexSwitch${prevSize}`),
+                });
+            }
+
+            const submenuOptions = SWITCH_VARIANTS.map((variant) => ({
+                content:
+                    variant.count === curSize
+                        ? `✓ ${variant.label} (Current)`
+                        : `⚡ ${variant.label}`,
+                disabled: variant.count === curSize,
+                callback: () => {
+                    if (variant.count !== curSize) {
+                        upgradeIndexSwitchNode(this, variant.type);
+                    }
+                },
+            }));
+
+            topMenuItems.push({
+                content: "⚡ Convert Index Switch Size (10–100)",
+                has_submenu: true,
+                submenu: {
+                    options: submenuOptions,
+                },
+            });
+
+            options.unshift(...topMenuItems, null);
+        };
+
         const origOnDrawBackground = nodeType.prototype.onDrawBackground;
         nodeType.prototype.onDrawBackground = function (ctx) {
             if (origOnDrawBackground) origOnDrawBackground.apply(this, arguments);
             if (this.flags?.collapsed) return;
 
+            const numInputs = getNumInputs(this);
             silenceDefaultInputNames(this);
             const activeIdx = getActiveSwitchIndex(this);
             const nodeW = this.size[0];
 
             ctx.save();
-            for (let i = 0; i < NUM_INPUTS; i++) {
+            for (let i = 0; i < numInputs; i++) {
                 const geom = getRowGeometry(this, i);
                 if (!geom) continue;
 
                 const { topY, rowH } = geom;
 
-                // Alternating dark grey and light grey row background
                 ctx.fillStyle = i % 2 === 0 ? "#1c1c20" : "#2f2f37";
                 ctx.fillRect(0, topY, nodeW, rowH);
 
-                // Gutter cell background
                 if (i === activeIdx) {
                     ctx.fillStyle = "rgba(74, 222, 128, 0.18)";
                     ctx.fillRect(SOCKET_ZONE_W, topY, GUTTER_W, rowH);
@@ -523,14 +702,12 @@ app.registerExtension({
                     ctx.fillRect(SOCKET_ZONE_W, topY, GUTTER_W, rowH);
                 }
 
-                // Subtle horizontal row divider
                 ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
                 ctx.fillRect(0, topY + rowH - 1, nodeW, 1);
             }
 
-            // Vertical divider lines for the number gutter
             const firstGeom = getRowGeometry(this, 0);
-            const lastGeom = getRowGeometry(this, NUM_INPUTS - 1);
+            const lastGeom = getRowGeometry(this, numInputs - 1);
             if (firstGeom && lastGeom) {
                 const totalTop = firstGeom.topY;
                 const totalH = lastGeom.topY + lastGeom.rowH - totalTop;
@@ -546,6 +723,7 @@ app.registerExtension({
             if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
             if (this.flags?.collapsed) return;
 
+            const numInputs = getNumInputs(this);
             const labels = ensureRowLabelsArray(this);
             const activeIdx = getActiveSwitchIndex(this);
             const nodeW = this.size[0];
@@ -554,13 +732,12 @@ app.registerExtension({
             ctx.font = '12px "JetBrains Mono", "Consolas", "Monaco", monospace';
             ctx.textBaseline = "middle";
 
-            for (let i = 0; i < NUM_INPUTS; i++) {
+            for (let i = 0; i < numInputs; i++) {
                 const geom = getRowGeometry(this, i);
                 if (!geom) continue;
 
                 const { centerY, topY, rowH } = geom;
 
-                // 1. Row number in gutter (right-aligned)
                 ctx.textAlign = "right";
                 if (i === activeIdx) {
                     ctx.font = 'bold 12px "JetBrains Mono", "Consolas", "Monaco", monospace';
@@ -571,7 +748,6 @@ app.registerExtension({
                 }
                 ctx.fillText(`${i}`, LABEL_START_X - 6, centerY);
 
-                // 2. Custom label text in row
                 const customText = labels[i] || "";
                 const rightPad = i === 0 ? 65 : 10;
                 const maxTextW = Math.max(40, nodeW - LABEL_START_X - 8 - rightPad);

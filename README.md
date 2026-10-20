@@ -5,11 +5,14 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
 
 ## Included Nodes
 
-### 1. `WFA Index Switch 100 ⚡ (WFA Suite)`
+### 1. `WFA Index Switch (10 / 20 / 30 / 40 / 50 / 60 / 70 / 80 / 90 / 100) ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Switches`
+- **Variants**:
+  - 10 sizes from **`WFA Index Switch 10 ⚡`** up to **`WFA Index Switch 100 ⚡`** (in steps of 10).
 - **Features**:
-  - **100 Wildcard Inputs (`0` … `99`)**: Accepts any data type (`MODEL`, `LATENT`, `IMAGE`, `STRING`, `CONDITIONING`, `CLIP`, `VAE`, etc.).
-  - **True Lazy Evaluation**: Uses ComfyUI's native `check_lazy_status` so **only** the upstream branch connected to the selected `index` is executed. All other 99 branches are completely ignored.
+  - **1-Click Upgrade / Resize (`+10`, `-10`, or Any Size `10–100`)**: Right-click any Index Switch node to **`⚡ Expand +10 Inputs`**, **`⚡ Shrink -10 Inputs`**, or jump to any size (`10` to `100`) in-place while keeping all connected wires, custom row labels, `index` connection, title, and colors.
+  - **Wildcard Inputs (`0` … $N-1$)**: Accepts any data type (`MODEL`, `LATENT`, `IMAGE`, `STRING`, `CONDITIONING`, `CLIP`, `VAE`, etc.).
+  - **True Lazy Evaluation**: Uses ComfyUI's native `check_lazy_status` so **only** the upstream branch connected to the selected `index` is executed. All other branches are completely ignored.
   - **Numbered Gutter & Alternating Dark/Light Grey Rows**: Matches the visual layout of `WFA Text Index Switch` with alternating row shading and active green row indicator.
   - **Clickable & Writeable Row Labels**: Click any row to type a custom name right next to its connection dot (replaces static `input_28` labels; use `Enter`/`Up`/`Down` to move between rows).
   - **Wire & Label Reordering Shortcuts**:

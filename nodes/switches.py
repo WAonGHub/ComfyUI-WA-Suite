@@ -1,21 +1,23 @@
 from .utils import SUITE_CATEGORY, any_type
 
-NUM_INPUTS = 100
-START_INDEX = 0  # Change to 1 if you prefer 1-100 instead of 0-99
+START_INDEX = 0  # Change to 1 if you prefer 1-N instead of 0-(N-1)
+SWITCH_SIZES = (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
 
 
-class WFA_IndexSwitch100:
+class _WFAIndexSwitchBase:
     """
-    WFA Index Switch 100: A 100-input wildcard Index Switch for ComfyUI.
+    Base class for WFA Lazy Wildcard Index Switches (10 to 100 inputs).
     Uses ComfyUI's lazy evaluation so ONLY the upstream branch connected
-    to the active index is executed. All other 99 branches are completely ignored.
+    to the active index is executed. All other branches are completely ignored.
     """
+
+    NUM_INPUTS = 100
 
     @classmethod
     def INPUT_TYPES(cls):
         optional_inputs = {
             f"input_{i}": (any_type, {"lazy": True})
-            for i in range(START_INDEX, START_INDEX + NUM_INPUTS)
+            for i in range(START_INDEX, START_INDEX + cls.NUM_INPUTS)
         }
         return {
             "required": {
@@ -24,7 +26,7 @@ class WFA_IndexSwitch100:
                     {
                         "default": START_INDEX,
                         "min": START_INDEX,
-                        "max": START_INDEX + NUM_INPUTS - 1,
+                        "max": START_INDEX + cls.NUM_INPUTS - 1,
                         "step": 1,
                     },
                 ),
@@ -52,10 +54,19 @@ class WFA_IndexSwitch100:
         return (kwargs.get(target_key, None),)
 
 
-NODE_CLASS_MAPPINGS = {
-    "WFA_IndexSwitch100": WFA_IndexSwitch100,
-}
+NODE_CLASS_MAPPINGS = {}
+NODE_DISPLAY_NAME_MAPPINGS = {}
 
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "WFA_IndexSwitch100": "WFA Index Switch 100 ⚡ (WFA Suite)",
-}
+for _size in SWITCH_SIZES:
+    _cls_name = f"WFA_IndexSwitch{_size}"
+    _cls = type(
+        _cls_name,
+        (_WFAIndexSwitchBase,),
+        {
+            "__doc__": f"WFA Index Switch {_size}: {_size}-input lazy wildcard Index Switch for ComfyUI.",
+            "NUM_INPUTS": _size,
+        },
+    )
+    globals()[_cls_name] = _cls
+    NODE_CLASS_MAPPINGS[_cls_name] = _cls
+    NODE_DISPLAY_NAME_MAPPINGS[_cls_name] = f"WFA Index Switch {_size} ⚡ (WFA Suite)"
