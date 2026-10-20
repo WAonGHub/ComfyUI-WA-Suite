@@ -229,6 +229,22 @@ function buildRowListEditor(node, masterTextarea) {
     }
 
     function getSelectedRow() {
+        if (node.inputs) {
+            const selSlot = node.inputs.findIndex((inp) => inp?.name === "select");
+            if (selSlot >= 0 && typeof node.getInputLink === "function") {
+                try {
+                    const link = node.getInputLink(selSlot);
+                    const graph = node.graph || app.graph;
+                    const originNode = link && graph ? graph.getNodeById(link.origin_id) : null;
+                    const upWidget = originNode?.widgets?.find(
+                        (w) => w.name === "select" || w.name === "index" || w.name === "value"
+                    );
+                    if (upWidget != null && upWidget.value != null) {
+                        return Number(upWidget.value) || 0;
+                    }
+                } catch (_) {}
+            }
+        }
         const selectWidget = node.widgets?.find((w) => w.name === "select");
         return selectWidget ? Number(selectWidget.value) || 0 : 0;
     }
