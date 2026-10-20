@@ -10,6 +10,6 @@ dependencies = []
 Repository = "https://github.com/WAonGHub/ComfyUI-WA-Suite"
 
 [tool.comfy]
-PublisherId = "wa"
+PublisherId = "waonghub"
 DisplayName = "WA Node Suite"
 Icon = ""
