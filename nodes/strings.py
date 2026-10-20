@@ -51,7 +51,7 @@ class _WAFindAndReplaceBase:
 
         return {
             "required": {
-                "text": ("STRING", {"default": "", "multiline": True}),
+                "text": ("STRING", {"forceInput": True}),
                 "mode": (
                     ["simultaneous (single-pass)", "sequential (chained)"],
                     {"default": "simultaneous (single-pass)"},

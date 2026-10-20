@@ -24,6 +24,8 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - `WFA Find & Replace 40 ⚡ (WFA Suite)` (`find_1`/`replace_1` … `find_40`/`replace_40`)
   - `WFA Find & Replace 60 ⚡ (WFA Suite)` (`find_1`/`replace_1` … `find_60`/`replace_60`)
 - **Features**:
+  - **1-Click Upgrade / Resize (`20` $\leftrightarrow$ `40` $\leftrightarrow$ `60`)**: Right-click any Find & Replace node and select **`⚡ Convert to WFA Find & Replace 40 / 60 (Keep All Wires & Text)`** to upgrade (or downsize) in-place while keeping all connected wires, typed text, custom slot labels, title, and colors.
+  - **Direct `● text` Input Socket**: Clean connection dot at the top instead of a bulky multiline textbox.
   - **Simultaneous (Single-Pass) Mode**: Compiles all active search strings into a single LRU-cached pass with $O(1)$ lookup per match.
   - **Sequential (Chained) Mode**: Applies replacements in order (`1` $\rightarrow$ $N$) using fast C-level `str.replace`.
   - Supports **Case Sensitive** and **Regular Expression (`use_regex`)** toggles.
