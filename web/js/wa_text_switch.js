@@ -472,7 +472,7 @@ function buildRowListEditor(node, masterTextarea) {
 }
 
 function tryAttachWhenMounted(node) {
-    const textWidget = node.widgets?.find((w) => w.name === "text");
+    const textWidget = node.widgets?.find((w) => w.name === "text" || w.name === "banlists");
     const textarea = textWidget?.inputEl || textWidget?.element;
     if (textarea && textarea.tagName === "TEXTAREA" && textarea.dataset.waEnhanced !== "true") {
         if (textarea.parentElement) {
