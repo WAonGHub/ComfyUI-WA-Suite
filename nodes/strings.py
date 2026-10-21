@@ -46,18 +46,62 @@ class _WAFindAndReplaceBase:
     def INPUT_TYPES(cls):
         optional_inputs = {}
         for i in range(1, cls.NUM_ENTRIES + 1):
-            optional_inputs[f"find_{i}"] = ("STRING", {"default": "", "multiline": False})
-            optional_inputs[f"replace_{i}"] = ("STRING", {"default": "", "multiline": False})
+            optional_inputs[f"find_{i}"] = (
+                "STRING",
+                {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": f"Search string #{i} to find in the input text (e.g. /*(MOOD)*/).",
+                },
+            )
+            optional_inputs[f"replace_{i}"] = (
+                "STRING",
+                {
+                    "default": "",
+                    "multiline": False,
+                    "tooltip": f"Replacement text #{i} that will replace matches of find_{i}.",
+                },
+            )
 
         return {
             "required": {
-                "text": ("STRING", {"forceInput": True}),
+                "text": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Input text in which all active find/replace rules will be applied.",
+                    },
+                ),
                 "mode": (
                     ["simultaneous (single-pass)", "sequential (chained)"],
-                    {"default": "simultaneous (single-pass)"},
+                    {
+                        "default": "simultaneous (single-pass)",
+                        "tooltip": (
+                            "• simultaneous (single-pass): Replaces all find rules in one pass so earlier replacements are never modified by later rules.\n"
+                            "• sequential (chained): Runs rule 1, then rule 2 on the result of rule 1, etc. (allows nested tags inside replacements)."
+                        ),
+                    },
                 ),
-                "case_sensitive": ("BOOLEAN", {"default": True}),
-                "use_regex": ("BOOLEAN", {"default": False}),
+                "case_sensitive": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "tooltip": (
+                            "• true: Uppercase/lowercase letters must match exactly (e.g. /*(MOOD)*/ only matches /*(MOOD)*/).\n"
+                            "• false: Ignores uppercase/lowercase differences (matches /*(MOOD)*/, /*(mood)*/, and /*(Mood)*/)."
+                        ),
+                    },
+                ),
+                "use_regex": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "tooltip": (
+                            "• false (Recommended): Treats find strings as exact literal text (safe for special symbols like /*(TAG)*/).\n"
+                            "• true: Treats find strings as Regular Expression (RegEx) patterns where symbols like *, (), [], | act as wildcards/groups."
+                        ),
+                    },
+                ),
             },
             "optional": optional_inputs,
         }
@@ -193,6 +237,7 @@ class WFA_TextIndexSwitch:
                         "min": 0,
                         "max": 9999,
                         "step": 1,
+                        "tooltip": "Row index (0–99) to select and output. Tip: Click any row number in the left gutter to select it directly.",
                     },
                 ),
                 "strip_comment_index": (

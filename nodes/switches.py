@@ -28,6 +28,7 @@ class _WFAIndexSwitchBase:
                         "min": START_INDEX,
                         "max": START_INDEX + cls.NUM_INPUTS - 1,
                         "step": 1,
+                        "tooltip": "Active input row index (0..N-1). Only the connected upstream branch at this index is executed (lazy evaluation).",
                     },
                 ),
             },
@@ -97,6 +98,7 @@ class WFA_IntIndexSwitch:
                         "min": 0,
                         "max": 9999,
                         "step": 1,
+                        "tooltip": "Row index (0–99) to output as selected_index. Tip: Click any row number in the left gutter to select it directly.",
                     },
                 ),
             }
