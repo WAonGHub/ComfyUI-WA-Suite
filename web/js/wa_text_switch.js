@@ -269,10 +269,9 @@ function buildRowListEditor(node, masterTextarea) {
                 continue;
             }
 
-            // If upstream node is another WFA Text Index Switch whose 'select' is also wired, keep walking
+            // If upstream node is another WFA Text/INT Index Switch whose 'select' is also wired, keep walking
             if (
-                (originNode.comfyClass === "WFA_TextIndexSwitch" ||
-                    originNode.comfyClass === "WA_TextIndexSwitch") &&
+                TARGET_CLASSES.has(originNode.comfyClass) &&
                 originNode.inputs?.some((inp) => inp?.name === "select" && inp?.link != null)
             ) {
                 curNode = originNode;
@@ -484,7 +483,7 @@ function tryAttachWhenMounted(node) {
     return textarea?.dataset.waEnhanced === "true";
 }
 
-const TARGET_CLASSES = new Set(["WFA_TextIndexSwitch", "WA_TextIndexSwitch"]);
+const TARGET_CLASSES = new Set(["WFA_TextIndexSwitch", "WA_TextIndexSwitch", "WFA_IntIndexSwitch"]);
 
 app.registerExtension({
     name: "WFA.TextIndexSwitch",

@@ -70,3 +70,47 @@ for _size in SWITCH_SIZES:
     globals()[_cls_name] = _cls
     NODE_CLASS_MAPPINGS[_cls_name] = _cls
     NODE_DISPLAY_NAME_MAPPINGS[_cls_name] = f"WFA Index Switch {_size} ⚡ (WFA Suite)"
+
+
+class WFA_IntIndexSwitch:
+    """
+    WFA INT Index Switch: 100-row visual index selector UI with editable row notes/labels,
+    clickable row numbers, and alternating dark/light grey row shading.
+    Outputs only the selected INT index (no text output or comment stripping needed).
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                    },
+                ),
+                "select": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 9999,
+                        "step": 1,
+                    },
+                ),
+            }
+        }
+
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("selected_index",)
+    FUNCTION = "select_index"
+    CATEGORY = f"{SUITE_CATEGORY}/Switches"
+
+    def select_index(self, text: str = "", select: int = 0):
+        return (select,)
+
+
+NODE_CLASS_MAPPINGS["WFA_IntIndexSwitch"] = WFA_IntIndexSwitch
+NODE_DISPLAY_NAME_MAPPINGS["WFA_IntIndexSwitch"] = "WFA INT Index Switch ⚡ (WFA Suite)"
+

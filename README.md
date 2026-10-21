@@ -31,16 +31,17 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - **Sequential (Chained) Mode**: Applies replacements in order (`1` $\rightarrow$ $N$) using fast C-level `str.replace`.
   - Supports **Case Sensitive** and **Regular Expression (`use_regex`)** toggles.
 
-### 3. `WFA Text Index Switch ⚡ (WFA Suite)`
-- **Category**: `WFA Node Suite/Strings`
+### 3. `WFA Text Index Switch ⚡ (WFA Suite)` & `WFA INT Index Switch ⚡ (WFA Suite)`
+- **Categories**: `WFA Node Suite/Strings` (`WFA Text Index Switch`) & `WFA Node Suite/Switches` (`WFA INT Index Switch`)
 - **Features**:
   - **Row Number Gutter (`0`, `1`, `2`, …)**: Displays line indices directly next to the text box so you never have to manually type `/*0*/`, `/*1*/`, etc.
-  - **Alternating Dark Grey & Light Grey Rows**: Zebra-striped row backgrounds that automatically expand if a long prompt wraps onto multiple visual lines.
+  - **Alternating Dark Grey & Light Grey Rows**: Zebra-striped row backgrounds that automatically expand if a long prompt or label wraps onto multiple visual lines.
   - **Click-to-Select, Insert & Delete Rows**:
     - **Click** a row number in the left gutter to set `select` to that index.
     - **Ctrl + Click** a row number to insert a new blank row there and push all rows below it down by 1.
     - **Shift + Click** (or **Alt + Click**) a row number to delete that row and pull all rows below it up by 1.
-  - **Backwards-Compatible Paste (`strip_comment_index`)**: Automatically strips leading `/*0*/`, `/*1*/` prefixes if you paste prompts from older selector nodes.
+  - **`WFA INT Index Switch ⚡`**: Dedicated INT-only version with the exact same 100-row labeled UI, outputting only `selected_index` (`INT`) without `STRING` output or `strip_comment_index`.
+  - **Backwards-Compatible Paste (`strip_comment_index` on Text Index Switch)**: Automatically strips leading `/*0*/`, `/*1*/` prefixes if you paste prompts from older selector nodes.
 
 ### 4. `WFA Full Image Refiners ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Refiners`
