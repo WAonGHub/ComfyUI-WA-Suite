@@ -52,6 +52,14 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - `WFA Edge-Targeted Refiner ⚡ (WFA Suite)` & `(Pipe)` — Generates a Sobel edge mask (`EDGE_MASK`) to focus refinement on edges and details.
   - `WFA Smart Mask Refiner ⚡ (WFA Suite)` & `(Pipe)` — Combines Sobel edge detection, morphological dilation, base mask level, and Gaussian blur (`SMART_MASK`).
 
+### 5. `WFA Loop Iterator ⚡ (WFA Suite)`
+- **Category**: `WFA Node Suite/Iterators`
+- **Features**:
+  - **All-in-One INT Counter, Auto-Rewinder & Queue Trigger**: Combines an incrementing `INT` counter, list limit rewinder (`reset_to` $\rightarrow$ `end_index`), multi-pass loop counter (`total_loops`), and `ImpactQueueTrigger` into a single node.
+  - **No Crash on Completion**: Unlike LevelPixel's `Iterator [LP]` (which stops the queue by throwing a red `RuntimeError`), `WFA Loop Iterator` cleanly stops auto-queuing when all `total_loops` passes finish and resets back to `reset_to` & `Loop 1`.
+  - **1-Click Cancel & Live Switch Highlighting**: Holds the active `index` during generation so connected `WFA Text Index Switch` / `WFA Index Switch` nodes highlight the active row in green, and cancels cleanly on a single click of ComfyUI's Cancel (`X`) button.
+  - **Built-in `↺ Reset Counter to Start` Button**: One click on the node resets `index` to `reset_to` and `current_loop` to `1`.
+
 ## Installation
 
 ### Via ComfyUI-Manager
