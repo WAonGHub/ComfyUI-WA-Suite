@@ -720,9 +720,10 @@ app.registerExtension({
         };
 
         const origOnDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function (ctx) {
+        nodeType.prototype.onDrawForeground = function (ctx, graphCanvas, canvasEl, lowQuality) {
             if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
             if (this.flags?.collapsed) return;
+            if (lowQuality || graphCanvas?.low_quality || app.canvas?.low_quality) return;
 
             const numInputs = getNumInputs(this);
             const labels = ensureRowLabelsArray(this);
