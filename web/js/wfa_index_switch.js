@@ -176,7 +176,8 @@ function getActiveSwitchIndex(node) {
             if (
                 (originNode.comfyClass === "WFA_TextIndexSwitch" ||
                     originNode.comfyClass === "WA_TextIndexSwitch" ||
-                    originNode.comfyClass === "WFA_IntIndexSwitch") &&
+                    originNode.comfyClass === "WFA_IntIndexSwitch" ||
+                    originNode.comfyClass === "WFA_TagBanlistSwitch") &&
                 originNode.inputs?.some((inp) => inp?.name === "select" && inp?.link != null)
             ) {
                 curNode = originNode;

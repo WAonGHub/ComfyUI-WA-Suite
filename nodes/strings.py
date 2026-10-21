@@ -210,6 +210,202 @@ for _size in FIND_REPLACE_SIZES:
 
 
 _COMMENT_PREFIX_RE = re.compile(r"^\s*/\*\s*\d+\s*\*/\s*")
+_ANY_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/")
+_WEIGHT_SUFFIX_RE = re.compile(r":\s*[-+]?\d*\.?\d+\s*$")
+
+
+def _normalize_tag_key(raw: str) -> str:
+    """Normalizes a tag for comparison: lowercase, underscores to spaces, collapsed whitespace."""
+    s = _WEIGHT_SUFFIX_RE.sub("", raw.strip())
+    return " ".join(s.replace("_", " ").lower().split())
+
+
+def _compile_banlist_rules(banlist_str: str):
+    """
+    Parses a banlist string (stripping any /*...*/ comments) into:
+    - exact_set: set of normalized tag strings
+    - wildcard_regexes: list of compiled regexes for entries containing '*'
+    - clean_entries: list of normalized entries (for partial/phrase modes and active_banlist output)
+    """
+    cleaned = _ANY_BLOCK_COMMENT_RE.sub("", banlist_str or "")
+    raw_items = [item.strip() for item in re.split(r"[,\n\r]+", cleaned) if item.strip()]
+
+    wrapper_chars = "\"'“”‘’()[]{}<>«»"
+    exact_set: set[str] = set()
+    wildcard_regexes: list[re.Pattern] = []
+    clean_entries: list[str] = []
+
+    for item in raw_items:
+        core = item.strip(wrapper_chars).strip()
+        norm = _normalize_tag_key(core)
+        if not norm:
+            continue
+        clean_entries.append(norm)
+        if "*" in norm:
+            # Convert wildcard '*' into regex '.*'
+            parts = [re.escape(p) for p in norm.split("*")]
+            pat = re.compile(r"^" + r".*".join(parts) + r"$", re.IGNORECASE)
+            wildcard_regexes.append(pat)
+        else:
+            exact_set.add(norm)
+
+    return exact_set, wildcard_regexes, clean_entries
+
+
+def _is_tag_banned(
+    norm_tag: str,
+    exact_set: set[str],
+    wildcard_regexes: list[re.Pattern],
+    clean_entries: list[str],
+    match_mode: str,
+) -> bool:
+    if not norm_tag:
+        return False
+
+    if norm_tag in exact_set:
+        return True
+
+    for pat in wildcard_regexes:
+        if pat.match(norm_tag):
+            return True
+
+    if match_mode.startswith("contains"):
+        # Check if any banned word/phrase appears as a word or substring in norm_tag
+        for entry in clean_entries:
+            entry_clean = entry.replace("*", "").strip()
+            if entry_clean and entry_clean in norm_tag:
+                return True
+
+    return False
+
+
+def _strip_balanced_wrappers(prefix: str, suffix: str) -> tuple[str, str]:
+    """
+    If a single tag is wrapped in its own balanced parentheses/brackets like `(blue eyes:1.2)`,
+    removes those balanced pairs while preserving any unbalanced outer group brackets like `(( tag1, tag2 ))`.
+    """
+    pairs = {")": "(", "]": "[", "}": "{"}
+    p_list = list(prefix)
+    s_list = list(suffix)
+
+    while p_list and s_list:
+        # Find last opening bracket in p_list and first matching closing bracket in s_list
+        last_open_idx = -1
+        for idx in range(len(p_list) - 1, -1, -1):
+            if p_list[idx] in "([{":
+                last_open_idx = idx
+                break
+        if last_open_idx == -1:
+            break
+
+        open_ch = p_list[last_open_idx]
+        first_close_idx = -1
+        for idx in range(len(s_list)):
+            if s_list[idx] in ")]}" and pairs.get(s_list[idx]) == open_ch:
+                first_close_idx = idx
+                break
+        if first_close_idx == -1:
+            break
+
+        p_list.pop(last_open_idx)
+        s_list.pop(first_close_idx)
+
+    return "".join(p_list), "".join(s_list)
+
+
+def _filter_prompt_tags(text: str, banlist_str: str, match_mode: str) -> str:
+    exact_set, wildcard_regexes, clean_entries = _compile_banlist_rules(banlist_str)
+    if not clean_entries or not text:
+        return text
+
+    if match_mode.startswith("raw text"):
+        result = text
+        encl_chars = r"\"'‘’“”«»\(\)\[\]\{\}<>"
+        for entry in clean_entries:
+            entry_clean = entry.replace("*", "").strip()
+            if not entry_clean:
+                continue
+            flex_pattern = r"[\s_]+".join(re.escape(w) for w in entry_clean.split())
+            pattern = re.compile(
+                r"(?<!\w)["
+                + encl_chars
+                + r"]*"
+                + flex_pattern
+                + r"(?::\s*[-+]?\d*\.?\d+)?["
+                + encl_chars
+                + r"]*(?!\w)",
+                re.IGNORECASE,
+            )
+            result = pattern.sub("", result)
+        result = re.sub(r"\s*,\s*,\s*", ", ", result)
+        result = re.sub(r"\s+", " ", result)
+        result = re.sub(r"\s+([,.;?!])", r"\1", result)
+        return result.strip(" ,")
+
+    # Tokenize by comma, pipe, or newline while keeping delimiters
+    parts = re.split(r"([,|\n])", text)
+    out_parts: list[str] = []
+
+    wrapper_chars = " \t\"'“”‘’()[]{}<>«»"
+    i = 0
+    while i < len(parts):
+        seg = parts[i]
+        delim = parts[i + 1] if i + 1 < len(parts) else ""
+
+        # Do not touch /*...*/ placeholder comments like /*(MOOD)*/
+        if "/*" in seg and "*/" in seg:
+            out_parts.append(seg + delim)
+            i += 2
+            continue
+
+        # Separate leading wrapper chars, core tag, and trailing wrapper chars
+        start_idx = 0
+        while start_idx < len(seg) and seg[start_idx] in wrapper_chars:
+            start_idx += 1
+        end_idx = len(seg)
+        while end_idx > start_idx and seg[end_idx - 1] in wrapper_chars:
+            end_idx -= 1
+
+        prefix = seg[:start_idx]
+        core = seg[start_idx:end_idx]
+        suffix = seg[end_idx:]
+
+        # If suffix contains a weight like `:1.2)` where `:1.2` was inside `core`
+        norm_core = _normalize_tag_key(core)
+
+        if norm_core and _is_tag_banned(norm_core, exact_set, wildcard_regexes, clean_entries, match_mode):
+            rem_prefix, rem_suffix = _strip_balanced_wrappers(prefix, suffix)
+            kept_shell = rem_prefix + rem_suffix
+            if delim == "\n" or delim == "|":
+                out_parts.append(kept_shell + delim)
+            else:
+                # Comma delimiter is dropped along with the banned tag; keep only unbalanced group brackets
+                if kept_shell.strip():
+                    out_parts.append(kept_shell)
+        else:
+            out_parts.append(seg + delim)
+
+        i += 2
+
+    joined = "".join(out_parts)
+
+    # Clean up empty parentheses/brackets and redundant commas/spaces left after tag removal
+    prev = None
+    while prev != joined:
+        prev = joined
+        joined = re.sub(r"\(\s*,?\s*\)", "", joined)
+        joined = re.sub(r"\[\s*,?\s*\]", "", joined)
+        joined = re.sub(r",\s*,+", ",", joined)
+        joined = re.sub(r"([(\[{|])\s*,\s*", r"\1 ", joined)
+        joined = re.sub(r"\{\s*\|\s*", "{ ", joined)
+        joined = re.sub(r"\|\s*\|\s*", "| ", joined)
+        joined = re.sub(r"\|\s*\}", " }", joined)
+        joined = re.sub(r"\{\s*\}", "", joined)
+
+    joined = re.sub(r"[ \t]{2,}", " ", joined)
+    joined = re.sub(r"\s+,", ",", joined)
+    return joined.strip().strip(",").strip()
+
 
 
 class WFA_TextIndexSwitch:
@@ -271,12 +467,114 @@ class WFA_TextIndexSwitch:
         return (chosen.strip(), select)
 
 
+class WFA_TagBanlistSwitch:
+    """
+    WFA Tag Banlist Switch: 100-row selectable tag banlist / prompt filter UI.
+    Each row (0–99) holds a customizable list of banned tags (e.g. eye colors, facial features
+    when a character is looking away). Supports /*LABEL*/ row comments, * wildcards, weighted tags,
+    and preserves outer prompt grouping syntax.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "text": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Main prompt text to filter using the selected banlist row.",
+                    },
+                ),
+                "banlists": (
+                    "STRING",
+                    {
+                        "default": "",
+                        "multiline": True,
+                        "tooltip": (
+                            "100-row Banlist table (0–99). Enter comma-separated tags to remove on each row.\n"
+                            "Tip: You can label rows using /*LOOKING AWAY*/ at the start of a row, and use * wildcards like *eyes*."
+                        ),
+                    },
+                ),
+                "select": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 9999,
+                        "step": 1,
+                        "tooltip": "Row index (0–99) of the active banlist to apply. Click any row number in the left gutter to select it.",
+                    },
+                ),
+                "match_mode": (
+                    [
+                        "exact tag (supports * wildcard)",
+                        "contains word (remove any tag containing banned word)",
+                        "raw text phrase removal",
+                    ],
+                    {
+                        "default": "exact tag (supports * wildcard)",
+                        "tooltip": (
+                            "• exact tag (supports * wildcard): Removes tags matching the banned entry (ignores case, _ vs space, and (tag:1.2) weights). Supports * wildcards like *eyes*.\n"
+                            "• contains word: Removes any comma-separated tag that contains the banned word (e.g. 'eyes' removes 'blue eyes', 'closed eyes', etc.).\n"
+                            "• raw text phrase removal: Strips banned words/phrases directly from sentences or prose."
+                        ),
+                    },
+                ),
+            },
+            "optional": {
+                "extra_banlist": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Optional additional banned tags string to combine with the selected banlist row.",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING", "STRING", "INT")
+    RETURN_NAMES = ("text", "active_banlist", "selected_index")
+    FUNCTION = "apply_banlist"
+    CATEGORY = f"{SUITE_CATEGORY}/Strings"
+
+    def apply_banlist(
+        self,
+        text: str,
+        banlists: str = "",
+        select: int = 0,
+        match_mode: str = "exact tag (supports * wildcard)",
+        extra_banlist: str = "",
+    ):
+        chosen_row = ""
+        if banlists:
+            lines = banlists.splitlines()
+            if 0 <= select < len(lines):
+                chosen_row = lines[select]
+
+        combined_banlist = chosen_row
+        if extra_banlist:
+            combined_banlist = f"{chosen_row}, {extra_banlist}" if chosen_row else extra_banlist
+
+        _, _, clean_entries = _compile_banlist_rules(combined_banlist)
+        active_banlist_str = ", ".join(clean_entries)
+
+        if not text or not clean_entries:
+            return (text, active_banlist_str, select)
+
+        filtered = _filter_prompt_tags(text, combined_banlist, match_mode)
+        return (filtered, active_banlist_str, select)
+
+
 NODE_CLASS_MAPPINGS = {
     **_FIND_REPLACE_CLASSES,
     "WFA_TextIndexSwitch": WFA_TextIndexSwitch,
+    "WFA_TagBanlistSwitch": WFA_TagBanlistSwitch,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     **_FIND_REPLACE_NAMES,
     "WFA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
+    "WFA_TagBanlistSwitch": "WFA Tag Banlist Switch ⚡ (WFA Suite)",
 }

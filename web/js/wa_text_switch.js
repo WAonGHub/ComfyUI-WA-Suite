@@ -206,7 +206,7 @@ function buildRowListEditor(node, masterTextarea) {
         const joined = values.join("\n");
         masterTextarea.value = joined;
 
-        const textWidget = node.widgets?.find((w) => w.name === "text");
+        const textWidget = node.widgets?.find((w) => w.name === "text" || w.name === "banlists");
         if (textWidget) {
             textWidget.value = joined;
             textWidget.callback?.(joined);
@@ -483,7 +483,12 @@ function tryAttachWhenMounted(node) {
     return textarea?.dataset.waEnhanced === "true";
 }
 
-const TARGET_CLASSES = new Set(["WFA_TextIndexSwitch", "WA_TextIndexSwitch", "WFA_IntIndexSwitch"]);
+const TARGET_CLASSES = new Set([
+    "WFA_TextIndexSwitch",
+    "WA_TextIndexSwitch",
+    "WFA_IntIndexSwitch",
+    "WFA_TagBanlistSwitch",
+]);
 
 app.registerExtension({
     name: "WFA.TextIndexSwitch",
