@@ -1,6 +1,6 @@
 import { app } from "../../../scripts/app.js";
 
-const GUTTER_WIDTH = 44;
+const GUTTER_WIDTH = 28;
 const ROW_MIN_HEIGHT = 24;
 const TOTAL_ROWS = 100;
 
@@ -69,7 +69,7 @@ function ensureStyles() {
             width: ${GUTTER_WIDTH}px !important;
             min-width: ${GUTTER_WIDTH}px !important;
             max-width: ${GUTTER_WIDTH}px !important;
-            padding: 3px 8px 3px 4px !important;
+            padding: 3px 6px 3px 4px !important;
             box-sizing: border-box !important;
             text-align: right !important;
             font-family: "JetBrains Mono", "Consolas", "Monaco", "Courier New", monospace !important;
