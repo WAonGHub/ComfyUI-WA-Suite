@@ -40,7 +40,7 @@ class WFA_LoopIterator:
                 "end_index": (
                     "INT",
                     {
-                        "default": 347,
+                        "default": 10,
                         "min": 0,
                         "max": 999999,
                         "step": 1,
@@ -114,7 +114,7 @@ class WFA_LoopIterator:
         self,
         index: int = 0,
         reset_to: int = 0,
-        end_index: int = 347,
+        end_index: int = 10,
         step: int = 1,
         total_loops: int = 3,
         current_loop: int = 1,
