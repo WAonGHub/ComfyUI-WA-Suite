@@ -307,8 +307,8 @@ class WFA_LoopIterator:
                     "BOOLEAN",
                     {
                         "default": True,
-                        "label_on": "Auto-Queue (Run Loop)",
-                        "label_off": "Paused (Single Step)",
+                        "label_on": "Enabled",
+                        "label_off": "Paused",
                         "tooltip": "When enabled, automatically triggers the next generation in ComfyUI's queue until all passes finish (replaces ImpactQueueTrigger).",
                     },
                 ),

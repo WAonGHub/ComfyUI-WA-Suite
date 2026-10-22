@@ -172,11 +172,12 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
 
-                if (!this.widgets?.some((w) => w.name === "_wfa_reset_btn")) {
-                    const btn = this.addWidget("button", "↺ Reset Counter to Start", null, () => {
+                if (!this.widgets?.some((w) => w._wfaResetBtn || w.name === "Reset Counter" || w.name === "_wfa_reset_btn")) {
+                    const btn = this.addWidget("button", "Reset Counter", null, () => {
                         resetIteratorNode(this);
                     });
-                    btn.name = "_wfa_reset_btn";
+                    btn.label = "↺ Reset Counter";
+                    btn._wfaResetBtn = true;
                     btn.serialize = false;
                 }
 
