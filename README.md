@@ -53,13 +53,11 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - `WFA Edge-Targeted Refiner ⚡ (WFA Suite)` & `(Pipe)` — Generates a Sobel edge mask (`EDGE_MASK`) to focus refinement on edges and details.
   - `WFA Smart Mask Refiner ⚡ (WFA Suite)` & `(Pipe)` — Combines Sobel edge detection, morphological dilation, base mask level, and Gaussian blur (`SMART_MASK`).
 
-### 5. `WFA Loop Iterator ⚡ (WFA Suite)`
+### 5. `WFA Loop Iterator ⚡` & `WFA Prompt Counter ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Iterators`
 - **Features**:
-  - **All-in-One INT Counter, Auto-Rewinder & Queue Trigger**: Combines an incrementing `INT` counter, list limit rewinder (`reset_to` $\rightarrow$ `end_index`), multi-pass loop counter (`total_loops`), and `ImpactQueueTrigger` into a single node.
-  - **No Crash on Completion**: Unlike LevelPixel's `Iterator [LP]` (which stops the queue by throwing a red `RuntimeError`), `WFA Loop Iterator` cleanly stops auto-queuing when all `total_loops` passes finish and resets back to `reset_to` & `Loop 1`.
-  - **1-Click Cancel & Live Switch Highlighting**: Holds the active `index` during generation so connected `WFA Text Index Switch` / `WFA Index Switch` nodes highlight the active row in green, and cancels cleanly on a single click of ComfyUI's Cancel (`X`) button.
-  - **Built-in `↺ Reset Counter to Start` Button**: One click on the node resets `index` to `reset_to` and `current_loop` to `1`.
+  - **`WFA Loop Iterator ⚡`**: All-in-one `INT` counter, auto-rewinder (`reset_to` $\rightarrow$ `end_index`), multi-pass loop counter (`total_loops`), and `ImpactQueueTrigger` replacement in a single node. Stops cleanly without throwing red `RuntimeError` crashes, cancels on 1 click, and includes a **`↺ Reset Counter to Start`** button.
+  - **`WFA Prompt Counter ⚡`**: Reads the total prompt count (`count`) and 0-based `end_index` (`count - 1`) from Inspire Pack Batch Prompts (`ZIPPED_PROMPT` outputs, `---` formatted prompt strings, or `.txt` files in `inspire_prompts`), multiline prompt lists, or any ComfyUI `LIST`. Connect its **`end_index`** output directly into **`WFA Loop Iterator`**'s `end_index`!
 
 ## Installation
 

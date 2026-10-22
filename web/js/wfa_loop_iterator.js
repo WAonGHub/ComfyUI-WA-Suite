@@ -1,7 +1,10 @@
 import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
-const TARGET_CLASS = "WFA_LoopIterator";
+const ITERATOR_CLASS = "WFA_LoopIterator";
+const COUNTER_CLASS = "WFA_PromptCounter";
+const TARGET_CLASSES = new Set([ITERATOR_CLASS, COUNTER_CLASS]);
+
 const pendingSteps = new Map();
 let runWasAborted = false;
 
@@ -71,6 +74,19 @@ app.registerExtension({
         api.addEventListener("execution_interrupted", handleAbort);
         api.addEventListener("execution_error", handleAbort);
 
+        api.addEventListener("wfa-prompt-counter-feedback", ({ detail }) => {
+            if (!detail || detail.node_id == null) return;
+            const node = getNodeById(String(detail.node_id));
+            if (node) {
+                node._wfaIteratorStatus = {
+                    text: `${detail.count} Prompts • end_index: ${detail.end_index}`,
+                    progress: 1,
+                    done: true,
+                };
+                node.setDirtyCanvas?.(true, true);
+            }
+        });
+
         api.addEventListener("wfa-loop-iterator-step", ({ detail }) => {
             if (!detail || detail.node_id == null) return;
             const nodeIdStr = String(detail.node_id);
@@ -81,6 +97,7 @@ app.registerExtension({
                 // Keep widget on current_index while generating so connected WFA switches highlight the active row
                 setWidgetValue(node, "index", detail.current_index);
                 setWidgetValue(node, "current_loop", detail.current_loop);
+                setWidgetValue(node, "end_index", detail.end_index);
 
                 const span = Math.max(1, detail.end_index - detail.reset_to + 1);
                 const idxOffset = Math.max(0, detail.current_index - detail.reset_to);
@@ -148,40 +165,42 @@ app.registerExtension({
         });
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (nodeData.name !== TARGET_CLASS) return;
+        if (!TARGET_CLASSES.has(nodeData.name)) return;
 
-        const origOnNodeCreated = nodeType.prototype.onNodeCreated;
-        nodeType.prototype.onNodeCreated = function () {
-            const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
+        if (nodeData.name === ITERATOR_CLASS) {
+            const origOnNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function () {
+                const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
 
-            if (!this.widgets?.some((w) => w.name === "_wfa_reset_btn")) {
-                const btn = this.addWidget("button", "↺ Reset Counter to Start", null, () => {
-                    resetIteratorNode(this);
-                });
-                btn.name = "_wfa_reset_btn";
-                btn.serialize = false;
-            }
+                if (!this.widgets?.some((w) => w.name === "_wfa_reset_btn")) {
+                    const btn = this.addWidget("button", "↺ Reset Counter to Start", null, () => {
+                        resetIteratorNode(this);
+                    });
+                    btn.name = "_wfa_reset_btn";
+                    btn.serialize = false;
+                }
 
-            if (!this.size || this.size[0] < 310) {
-                const sz = this.computeSize ? this.computeSize() : [320, 250];
-                this.size = [Math.max(320, sz[0]), sz[1]];
-            }
-            return res;
-        };
+                if (!this.size || this.size[0] < 310) {
+                    const sz = this.computeSize ? this.computeSize() : [320, 250];
+                    this.size = [Math.max(320, sz[0]), sz[1]];
+                }
+                return res;
+            };
 
-        const origGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
-        nodeType.prototype.getExtraMenuOptions = function (_, options) {
-            if (origGetExtraMenuOptions) {
-                origGetExtraMenuOptions.apply(this, arguments);
-            }
-            options.unshift(
-                {
-                    content: "⚡ Reset Iterator to Start (reset_to & Loop 1)",
-                    callback: () => resetIteratorNode(this),
-                },
-                null
-            );
-        };
+            const origGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
+            nodeType.prototype.getExtraMenuOptions = function (_, options) {
+                if (origGetExtraMenuOptions) {
+                    origGetExtraMenuOptions.apply(this, arguments);
+                }
+                options.unshift(
+                    {
+                        content: "⚡ Reset Iterator to Start (reset_to & Loop 1)",
+                        callback: () => resetIteratorNode(this),
+                    },
+                    null
+                );
+            };
+        }
 
         const origOnDrawForeground = nodeType.prototype.onDrawForeground;
         nodeType.prototype.onDrawForeground = function (ctx, graphCanvas, canvasEl, lowQuality) {
