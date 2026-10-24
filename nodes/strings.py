@@ -1,6 +1,13 @@
+import os
 import re
 from functools import lru_cache
 from .utils import SUITE_CATEGORY
+
+_BANLISTS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+    "banlists",
+)
+_BANLIST_FILE_CACHE = {}
 
 
 @lru_cache(maxsize=128)
@@ -567,14 +574,294 @@ class WFA_TagBanlistSwitch:
         return (filtered, active_banlist_str, select)
 
 
+def _get_banlist_files() -> list[str]:
+    """Lists all .txt files inside ComfyUI-WA-Suite/banlists/ (including subfolders)."""
+    os.makedirs(_BANLISTS_DIR, exist_ok=True)
+    files: list[str] = []
+    try:
+        for root, _, filenames in os.walk(_BANLISTS_DIR):
+            for fname in sorted(filenames):
+                if fname.lower().endswith(".txt"):
+                    rel = os.path.relpath(os.path.join(root, fname), _BANLISTS_DIR).replace("\\", "/")
+                    files.append(rel)
+    except Exception:
+        pass
+    if not files:
+        files = ["banned_tags.txt"]
+    return files
+
+
+def _resolve_banlist_path(banlist_file: str) -> str | None:
+    if not banlist_file:
+        return None
+    candidate = os.path.abspath(os.path.join(_BANLISTS_DIR, banlist_file))
+    if os.path.isfile(candidate):
+        return candidate
+    return None
+
+
+def _build_smart_phrase_regex(core: str) -> str:
+    """Converts a banned tag phrase into a regex matching spaces/underscores and * wildcards."""
+    parts = re.split(r"[\s_]+", core)
+    token_exprs = []
+    for p in parts:
+        if not p:
+            continue
+        subparts = [re.escape(sp) for sp in p.split("*")]
+        token_exprs.append(r"[\w-]*".join(subparts))
+    return r"[\s_]+".join(token_exprs)
+
+
+def _get_compiled_banlist_file(filepath: str, mode: str):
+    """Loads and caches compiled patterns for a .txt banlist file keyed by (filepath, mtime, mode)."""
+    try:
+        mtime = os.path.getmtime(filepath)
+    except Exception:
+        mtime = 0.0
+
+    cache_key = (filepath, mtime, mode)
+    cached = _BANLIST_FILE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        raw_lines = [line.strip() for line in f if line.strip()]
+
+    wrapper_chars = "\"'‘’“”«»()[]{}<>"
+
+    if mode == "LP Tag Mode (RemoveBannedTagsFromTags)":
+        banned_set = set()
+        for line in raw_lines:
+            if line.startswith("#") or line.startswith("//"):
+                continue
+            tok = line.rstrip(",").strip().lower()
+            while tok and tok[0] in wrapper_chars:
+                tok = tok[1:].strip()
+            while tok and tok[-1] in wrapper_chars:
+                tok = tok[:-1].strip()
+            if tok:
+                banned_set.add(tok)
+                banned_set.add(tok.replace("_", " "))
+                banned_set.add(tok.replace(" ", "_"))
+        _BANLIST_FILE_CACHE[cache_key] = banned_set
+        return banned_set
+
+    if mode == "LP Text Mode (RemoveBannedTagsFromText)":
+        encl_chars = r'\"\'‘’“”«»\(\)\[\]\{\}<>'
+        # Sort longest first so multi-word phrases (e.g. 'red lips,') match before shorter suffixes ('lips,')
+        sorted_lines = sorted(raw_lines, key=len, reverse=True)
+        patterns = []
+        for tag in sorted_lines:
+            if tag.startswith("#") or tag.startswith("//"):
+                continue
+            patterns.append(
+                re.compile(
+                    r"(?<!\w)["
+                    + re.escape(encl_chars)
+                    + r"]*"
+                    + re.escape(tag.lower())
+                    + r"["
+                    + re.escape(encl_chars)
+                    + r"]*(?!\w)",
+                    re.IGNORECASE,
+                )
+            )
+        _BANLIST_FILE_CACHE[cache_key] = patterns
+        return patterns
+
+    # Default: "Smart Text & Tag Filter (recommended)"
+    core_phrases: list[str] = []
+    seen_cores: set[str] = set()
+    for line in raw_lines:
+        if line.startswith("#") or line.startswith("//"):
+            continue
+        cleaned = line.rstrip(",").strip()
+        while cleaned and cleaned[0] in wrapper_chars:
+            cleaned = cleaned[1:].strip()
+        while cleaned and cleaned[-1] in wrapper_chars:
+            cleaned = cleaned[:-1].strip()
+        cleaned_lower = cleaned.lower()
+        if cleaned_lower and cleaned_lower not in seen_cores:
+            seen_cores.add(cleaned_lower)
+            core_phrases.append(cleaned_lower)
+
+    # Sort longest phrases first so 'blue eyeliner' / 'red lips' / 'dark-blue eyes' match before 'eyeliner' / 'lips' / 'blue eyes'
+    core_phrases.sort(key=len, reverse=True)
+
+    chunk_size = 400
+    compiled_chunks: list[tuple[re.Pattern, re.Pattern]] = []
+    for i in range(0, len(core_phrases), chunk_size):
+        chunk = core_phrases[i : i + chunk_size]
+        exprs = [_build_smart_phrase_regex(c) for c in chunk if c]
+        if not exprs:
+            continue
+        alt = "(?:" + "|".join(exprs) + ")"
+        # 1. Standalone bracketed/weighted tag e.g. (glasses), (blue eyes:1.2), [red eyes]
+        wrapped_re = re.compile(
+            r"[\(\[\{<\"'‘’“”«»]+\s*"
+            + alt
+            + r"(?:\s*:\s*-?\d+(?:\.\d+)?)?\s*[\)\]\}>\"'‘’“”«»]+\s*,?",
+            re.IGNORECASE,
+        )
+        # 2. Bare or weighted tag in text/comma list e.g. blue eyes, or blue eyes:1.2
+        bare_re = re.compile(
+            r"(?<![\w-])"
+            + alt
+            + r"(?:\s*:\s*-?\d+(?:\.\d+)?)?(?![\w-])\s*,?",
+            re.IGNORECASE,
+        )
+        compiled_chunks.append((wrapped_re, bare_re))
+
+    _BANLIST_FILE_CACHE[cache_key] = compiled_chunks
+    return compiled_chunks
+
+
+class WFA_RemoveBannedTags:
+    """
+    WFA Remove Banned Tags: Compact file-based banned tag remover (upgraded from LevelPixel's
+    RemoveBannedTagsFromText). Reads any selectable .txt banlist from `ComfyUI-WA-Suite/banlists/`
+    and automatically re-evaluates whenever you edit and save the .txt file.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        files = _get_banlist_files()
+        default_file = "banned_tags.txt" if "banned_tags.txt" in files else files[0]
+        return {
+            "required": {
+                "text": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "tooltip": "Input prompt or tag string to remove banned tags from.",
+                    },
+                ),
+                "banlist_file": (
+                    files,
+                    {
+                        "default": default_file,
+                        "tooltip": (
+                            "Select which .txt banlist file inside 'ComfyUI-WA-Suite/banlists/' to use.\n"
+                            "Drop any number of custom .txt files into that folder and press R (or F5) to see them here."
+                        ),
+                    },
+                ),
+                "mode": (
+                    [
+                        "Smart Text & Tag Filter (recommended)",
+                        "LP Text Mode (RemoveBannedTagsFromText)",
+                        "LP Tag Mode (RemoveBannedTagsFromTags)",
+                    ],
+                    {
+                        "default": "Smart Text & Tag Filter (recommended)",
+                        "tooltip": (
+                            "• Smart Text & Tag Filter: Works whether lines in .txt end with a comma or not, matches longest phrases first (so 'lips' never eats half of 'red lips'), matches spaces & underscores, and removes (tag:1.2) weights cleanly.\n"
+                            "• LP Text Mode: LevelPixel's RemoveBannedTagsFromText regex behavior (sorted longest-first).\n"
+                            "• LP Tag Mode: LevelPixel's RemoveBannedTagsFromTags comma-split token filter."
+                        ),
+                    },
+                ),
+                "enabled": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Enabled",
+                        "label_off": "Bypassed",
+                        "tooltip": "Enable or bypass the banlist filter (when Bypassed, outputs the input text unchanged).",
+                    },
+                ),
+            },
+        }
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("text",)
+    FUNCTION = "remove_banned_tags"
+    CATEGORY = f"{SUITE_CATEGORY}/Strings"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        return True
+
+    @classmethod
+    def IS_CHANGED(cls, text="", banlist_file="banned_tags.txt", mode="", enabled=True):
+        filepath = _resolve_banlist_path(banlist_file)
+        mtime = os.path.getmtime(filepath) if filepath and os.path.isfile(filepath) else 0.0
+        return f"{banlist_file}:{mtime}:{mode}:{enabled}"
+
+    def remove_banned_tags(
+        self,
+        text: str,
+        banlist_file: str = "banned_tags.txt",
+        mode: str = "Smart Text & Tag Filter (recommended)",
+        enabled: bool = True,
+    ):
+        if not text or not enabled:
+            return (text,)
+
+        filepath = _resolve_banlist_path(banlist_file)
+        if not filepath:
+            return (text,)
+
+        compiled = _get_compiled_banlist_file(filepath, mode)
+        if not compiled:
+            return (text,)
+
+        if mode == "LP Tag Mode (RemoveBannedTagsFromTags)":
+            wrapper_chars = "\"'‘’“”«»()[]{}<>"
+            tokens = text.split(",")
+            kept_tokens = []
+            for token in tokens:
+                check = token.strip().lower()
+                while check and check[0] in wrapper_chars:
+                    check = check[1:].strip()
+                while check and check[-1] in wrapper_chars:
+                    check = check[:-1:].strip()
+                if check in compiled:
+                    continue
+                kept_tokens.append(token)
+            return (",".join(kept_tokens),)
+
+        if mode == "LP Text Mode (RemoveBannedTagsFromText)":
+            out = text
+            for pattern in compiled:
+                out = pattern.sub("", out)
+            out = re.sub(r"\s+", " ", out)
+            out = re.sub(r"\s+([,.;?!])", r"\1", out)
+            return (out.strip(),)
+
+        # Smart Text & Tag Filter (recommended)
+        orig_ended_with_comma = text.rstrip().endswith(",")
+        out = text
+        for wrapped_re, bare_re in compiled:
+            out = wrapped_re.sub("", out)
+            out = bare_re.sub("", out)
+
+        # Clean up spacing, empty groups, and leftover duplicate/leading/trailing commas
+        out = re.sub(r",\s*([\)\]\}>])", r"\1", out)
+        out = re.sub(r"([\(\[\{<])\s*,\s*", r"\1", out)
+        out = re.sub(r"[\(\[\{<]\s*(?::\s*-?\d+(?:\.\d+)?)?\s*[\)\]\}>]\s*,?", "", out)
+        out = re.sub(r"[ \t]+", " ", out)
+        out = re.sub(r"\s+([,.;?!\)\]\}>])", r"\1", out)
+        out = re.sub(r"([\(\[\{<])\s+", r"\1", out)
+        out = re.sub(r"(?:,\s*){2,}", ", ", out)
+        out = re.sub(r"^\s*,\s*", "", out)
+        out = out.strip()
+        if out.endswith(",") and not orig_ended_with_comma:
+            out = out[:-1].rstrip()
+
+        return (out,)
+
+
 NODE_CLASS_MAPPINGS = {
     **_FIND_REPLACE_CLASSES,
     "WFA_TextIndexSwitch": WFA_TextIndexSwitch,
     "WFA_TagBanlistSwitch": WFA_TagBanlistSwitch,
+    "WFA_RemoveBannedTags": WFA_RemoveBannedTags,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     **_FIND_REPLACE_NAMES,
     "WFA_TextIndexSwitch": "WFA Text Index Switch ⚡ (WFA Suite)",
     "WFA_TagBanlistSwitch": "WFA Tag Banlist Switch ⚡ (WFA Suite)",
+    "WFA_RemoveBannedTags": "WFA Remove Banned Tags ⚡ (WFA Suite)",
 }

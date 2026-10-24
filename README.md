@@ -42,6 +42,7 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
     - **Shift + Click** (or **Alt + Click**) a row number to delete that row and pull all rows below it up by 1.
   - **`WFA INT Index Switch ⚡`**: Dedicated INT-only version with the exact same 100-row labeled UI, outputting only `selected_index` (`INT`) without `STRING` output or `strip_comment_index`.
   - **`WFA Tag Banlist Switch ⚡`**: 100 selectable tag-banlist rows (`0–99`) in one node! Connect your main prompt to `● text`, select which banlist row to apply (e.g. Row `0` = empty/none, Row `1` = `/*LOOKING AWAY*/ *eyes*, eyelashes, smile, open mouth`, etc.), and it cleanly filters out banned tags while preserving prompt casing, weights `(tag:1.2)`, `((grouped tags))`, and `{dynamic|prompts}`.
+  - **`WFA Remove Banned Tags ⚡`**: Compact file-based banned tag remover that reads any selectable `.txt` banlist inside `ComfyUI-WA-Suite/banlists/` (ships with `banned_tags.txt` and `banned_tags2.txt`, and automatically discovers any new `.txt` files you add to `banlists/`). Includes **Smart Text & Tag Filter** (handles lines with or without trailing commas, matches longest phrases first so `lips` never eats half of `red lips`, removes `(tag:1.2)` weights cleanly, and live-reloads `.txt` edits on save), plus **LP Text Mode** and **LP Tag Mode**.
   - **Backwards-Compatible Paste (`strip_comment_index` on Text Index Switch)**: Automatically strips leading `/*0*/`, `/*1*/` prefixes if you paste prompts from older selector nodes.
 
 ### 4. `WFA Full Image Refiners ⚡ (WFA Suite)`
@@ -62,8 +63,8 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
 ## Installation
 
 ### Via ComfyUI-Manager
-1. Open **ComfyUI-Manager** $\rightarrow$ **Custom Nodes Manager** and search for **`WA Node Suite`**, or
-2. Click **Install via Git URL** and paste your repository URL.
+1. Open **ComfyUI-Manager** $\rightarrow$ **Custom Nodes Manager** and search for **`WFA`**, or
+2. Click **Install via Git URL** and paste `https://github.com/WAonGHub/ComfyUI-WA-Suite`.
 
 ### Manual Installation
 ```bash
