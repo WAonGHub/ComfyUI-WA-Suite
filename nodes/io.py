@@ -14,10 +14,11 @@ except ImportError:
 from .utils import SUITE_CATEGORY, any_type
 
 _ILLEGAL_WIN_CHARS_RE = re.compile(r'[<>:"|?*\x00-\x1f]')
+_COMMENT_PREFIX_RE = re.compile(r"^\s*/\*.*?\*/\s*")
 
 _SEPARATOR_MAP = {
-    "space": " ",
     "underscore": "_",
+    "space": " ",
     "dash": "-",
     "none": "",
 }
@@ -28,6 +29,92 @@ def _sanitize_segment(seg: str) -> str:
     # Windows disallows trailing dots or spaces on directory/file names
     cleaned = cleaned.rstrip(". ")
     return cleaned
+
+
+def _resolve_model_name(model_input, prompt_graph: dict | None = None, unique_id=None) -> str:
+    """
+    Extracts a readable model/checkpoint name whether the user connects a STRING/COMBO
+    directly OR wires a ComfyUI MODEL / PIPE link (by tracing the prompt graph upstream).
+    """
+    if model_input is None:
+        return ""
+    if isinstance(model_input, (str, int, float)):
+        s = str(model_input).strip()
+        return "" if s.lower() == "none" else s
+
+    if isinstance(prompt_graph, dict) and unique_id is not None:
+        uid = str(unique_id[0] if isinstance(unique_id, list) else unique_id)
+        cur_node = prompt_graph.get(uid)
+        link = cur_node.get("inputs", {}).get("model") if isinstance(cur_node, dict) else None
+        visited: set[str] = set()
+
+        while isinstance(link, list) and len(link) >= 1:
+            src_id = str(link[0])
+            if src_id in visited:
+                break
+            visited.add(src_id)
+            src_node = prompt_graph.get(src_id)
+            if not isinstance(src_node, dict):
+                break
+            src_inputs = src_node.get("inputs") or {}
+            class_type = str(src_node.get("class_type", ""))
+
+            # 1. Check standard model/checkpoint loader input keys
+            found_link = None
+            for key in ("ckpt_name", "unet_name", "model_name", "base_ckpt_name", "checkpoint", "diffusion_name"):
+                if key in src_inputs:
+                    val = src_inputs[key]
+                    if isinstance(val, str) and val.strip() and val.strip().lower() != "none":
+                        return val.strip()
+                    if isinstance(val, list) and len(val) >= 1:
+                        found_link = val
+                        break
+            if found_link is not None:
+                link = found_link
+                continue
+
+            # 2. Handle WFA_TextIndexSwitch or string primitive nodes if ckpt_name was wired
+            if class_type == "WFA_TextIndexSwitch" and isinstance(src_inputs.get("text"), str):
+                lines = src_inputs["text"].splitlines()
+                sel = src_inputs.get("select", 0)
+                if isinstance(sel, int) and 0 <= sel < len(lines):
+                    chosen = lines[sel]
+                    if src_inputs.get("strip_comment_index", True):
+                        chosen = _COMMENT_PREFIX_RE.sub("", chosen)
+                    return chosen.strip()
+
+            for skey in ("value", "string", "text"):
+                sval = src_inputs.get(skey)
+                if isinstance(sval, str) and sval.strip() and "\n" not in sval.strip():
+                    return sval.strip()
+
+            # 3. Handle Index Switch nodes (follow selected `input_{index}` if index is known)
+            idx_val = src_inputs.get("index")
+            if isinstance(idx_val, int) and f"input_{idx_val}" in src_inputs:
+                next_l = src_inputs.get(f"input_{idx_val}")
+                if isinstance(next_l, list):
+                    link = next_l
+                    continue
+
+            # 4. Follow upstream model / pipe pass-through inputs (e.g. LoraLoader, Refiner, Reroute)
+            next_link = None
+            for mkey in ("model", "basic_pipe", "pipe", "input", "anything"):
+                if isinstance(src_inputs.get(mkey), list):
+                    next_link = src_inputs[mkey]
+                    break
+            if next_link is None:
+                for v in src_inputs.values():
+                    if isinstance(v, list) and len(v) == 2:
+                        next_link = v
+                        break
+            link = next_link
+
+    for attr in ("ckpt_name", "model_name", "name"):
+        val = getattr(model_input, attr, None)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    return ""
 
 
 def _format_lora_stack(lora_stack) -> str:
@@ -55,8 +142,6 @@ def _format_lora_stack(lora_stack) -> str:
             name = str(item[0]).strip() if len(item) >= 1 and item[0] is not None else ""
             if not name or name.lower() == "none":
                 continue
-            # Strip trailing .safetensors / .pt only if user didn't want it?
-            # Note: TSC_LoRA_Stack2String keeps item[0] verbatim (including .safetensors & subfolder)
             if len(item) >= 3:
                 try:
                     m_wt = round(float(item[1]), 4)
@@ -87,35 +172,50 @@ def _get_base_output_dir() -> str:
     return os.path.abspath("output")
 
 
-def _resolve_target_txt_path(
+def _resolve_paths(
     subfolder: str,
     character: str,
+    char_folder: bool,
     prompt_index,
     separator: str,
     save_mode: str,
-) -> str:
+) -> tuple[str, str]:
+    """
+    Returns `(txt_filepath, image_path_prefix)`.
+    Example with subfolder='T2I MAIN', character='SubjectA', char_folder=True, prompt_index=1, separator='underscore':
+      - txt_filepath:      `<output>/T2I MAIN/SubjectA/SubjectA_1.txt`
+      - image_path_prefix: `T2I MAIN/SubjectA/SubjectA_1_`
+    """
     base_output = _get_base_output_dir()
     sub = (subfolder or "").strip()
 
-    if sub and os.path.isabs(sub):
+    is_abs = bool(sub and os.path.isabs(sub))
+    if is_abs:
         drive, tail = os.path.splitdrive(sub)
-        parts = [_sanitize_segment(p) for p in re.split(r"[\\/]+", tail) if _sanitize_segment(p)]
-        target_dir = os.path.join(drive + os.sep, *parts) if parts else (drive + os.sep)
+        sub_parts = [_sanitize_segment(p) for p in re.split(r"[\\/]+", tail) if _sanitize_segment(p)]
+        target_dir = os.path.join(drive + os.sep, *sub_parts) if sub_parts else (drive + os.sep)
+        rel_dir_parts: list[str] = list(sub_parts)
     else:
-        parts = [_sanitize_segment(p) for p in re.split(r"[\\/]+", sub) if _sanitize_segment(p)]
-        target_dir = os.path.join(base_output, *parts) if parts else base_output
+        sub_parts = [_sanitize_segment(p) for p in re.split(r"[\\/]+", sub) if _sanitize_segment(p)]
+        target_dir = os.path.join(base_output, *sub_parts) if sub_parts else base_output
+        rel_dir_parts = list(sub_parts)
 
     char_raw = (character or "").strip()
     if char_raw.lower().endswith(".txt"):
         char_raw = char_raw[:-4].strip()
 
-    # Support optional nested path inside `character` e.g. "Quintuplets/Nakano Miku 3"
     char_parts = [_sanitize_segment(p) for p in re.split(r"[\\/]+", char_raw) if _sanitize_segment(p)]
     if len(char_parts) > 1:
-        target_dir = os.path.join(target_dir, *char_parts[:-1])
+        extra_dirs = char_parts if char_folder else char_parts[:-1]
+        if extra_dirs:
+            target_dir = os.path.join(target_dir, *extra_dirs)
+            rel_dir_parts.extend(extra_dirs)
         char_base = char_parts[-1]
     elif len(char_parts) == 1:
         char_base = char_parts[0]
+        if char_folder:
+            target_dir = os.path.join(target_dir, char_base)
+            rel_dir_parts.append(char_base)
     else:
         char_base = ""
 
@@ -126,7 +226,7 @@ def _resolve_target_txt_path(
         else:
             idx_str = _sanitize_segment(str(prompt_index))
 
-    sep_char = _SEPARATOR_MAP.get(separator, " ")
+    sep_char = _SEPARATOR_MAP.get(separator, "_")
     if char_base and idx_str:
         stem = f"{char_base}{sep_char}{idx_str}"
     elif char_base:
@@ -148,14 +248,17 @@ def _resolve_target_txt_path(
                 break
             counter += 1
 
-    return filepath
+    rel_prefix_dir = "/".join(rel_dir_parts)
+    image_prefix = f"{rel_prefix_dir}/{stem}_" if rel_prefix_dir else f"{stem}_"
+
+    return filepath, image_prefix
 
 
 class WFA_SavePromptTxt:
     """
-    WFA Save Prompt .txt: All-in-one prompt & LoRA logger that replaces 8+ string concat,
-    LoRA stack converter, filename builder, and Save Text nodes with a single compact node.
-    Builds `<ComfyUI output>/<subfolder>/<character><sep><prompt_index>.txt` automatically.
+    WFA Save Prompt .txt: All-in-one model, LoRA, and prompt logger that saves structured .txt
+    files and outputs a matching `image_path` prefix (`subfolder/character/character_index_`)
+    ready to wire directly into Save Image nodes.
     """
 
     @classmethod
@@ -168,8 +271,8 @@ class WFA_SavePromptTxt:
                         "default": "",
                         "multiline": False,
                         "tooltip": (
-                            "Subfolder inside ComfyUI's 'output' directory (e.g. 'Nakano Miku' or 'Series/Miku').\n"
-                            "Leave empty to save directly in 'ComfyUI/output/', or enter an absolute path (e.g. 'D:/Prompts/Miku').\n"
+                            "Top-level folder inside ComfyUI's 'output' directory (e.g. 'T2I MAIN').\n"
+                            "Leave empty to use 'ComfyUI/output/' directly, or enter an absolute path (e.g. 'D:/Outputs/Project').\n"
                             "Missing folders are created automatically."
                         ),
                     },
@@ -177,16 +280,28 @@ class WFA_SavePromptTxt:
                 "character": (
                     "STRING",
                     {
-                        "default": "prompt",
+                        "default": "output",
                         "multiline": False,
-                        "tooltip": "Character or base filename for the .txt file (e.g. 'Nakano Miku 3'). Can also be wired from a STRING node.",
+                        "tooltip": (
+                            "Subject/group name used both as a sub-subfolder (`subfolder/character/`) "
+                            "and as the base filename (`character_index.txt`). Can also be wired from a STRING node."
+                        ),
+                    },
+                ),
+                "char_folder": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Yes",
+                        "label_off": "No",
+                        "tooltip": "When Yes, automatically places files inside a `<subfolder>/<character>/` sub-subfolder.",
                     },
                 ),
                 "separator": (
-                    ["space", "underscore", "dash", "none"],
+                    ["underscore", "space", "dash", "none"],
                     {
-                        "default": "space",
-                        "tooltip": "Character placed between `character` and `prompt_index` in the filename (e.g. 'Nakano Miku 3 1.txt' with 'space').",
+                        "default": "underscore",
+                        "tooltip": "Character placed between `character` and `prompt_index` in the filename (e.g. 'name_1.txt' or 'name 1.txt').",
                     },
                 ),
                 "save_mode": (
@@ -206,7 +321,7 @@ class WFA_SavePromptTxt:
                         "default": False,
                         "label_on": "Shown",
                         "label_off": "Hidden",
-                        "tooltip": "When Shown, adds section labels ([USED LORAS], [RAW PROMPT], [FINAL PROMPT], etc.) above each non-empty block.",
+                        "tooltip": "When Shown, adds section labels ([MODEL], [USED LORAS], [RAW PROMPT], [FINAL PROMPT], etc.) above each non-empty block.",
                     },
                 ),
                 "enabled": (
@@ -215,7 +330,7 @@ class WFA_SavePromptTxt:
                         "default": True,
                         "label_on": "Enabled",
                         "label_off": "Bypassed",
-                        "tooltip": "Enable or bypass writing the .txt file to disk.",
+                        "tooltip": "Enable or bypass writing the .txt file to disk (`image_path` and `text` outputs still work when Bypassed).",
                     },
                 ),
             },
@@ -226,10 +341,16 @@ class WFA_SavePromptTxt:
                         "tooltip": "Optional batch/prompt index (accepts INT or STRING directly — e.g. wire straight from WFA Loop Iterator `index`).",
                     },
                 ),
+                "model": (
+                    any_type,
+                    {
+                        "tooltip": "Connect the used checkpoint/model name (STRING / COMBO) OR wire a MODEL / PIPE link directly to log which model was used.",
+                    },
+                ),
                 "lora_stack": (
                     any_type,
                     {
-                        "tooltip": "Connect a LORA_STACK directly (automatically converts to `<lora:name:model_wt:clip_wt>` without needing a LoRA String converter node) or a LoRA STRING.",
+                        "tooltip": "Connect a LORA_STACK directly (converts to `<lora:name:model_wt:clip_wt>` automatically) or a LoRA STRING.",
                     },
                 ),
                 "raw_prompt": (
@@ -270,17 +391,21 @@ class WFA_SavePromptTxt:
                 "trigger": (
                     any_type,
                     {
-                        "tooltip": "Optional execution-order trigger (e.g. connect IMAGE or LATENT if you only want the .txt written after sampling finishes).",
+                        "tooltip": (
+                            "Optional execution-order trigger if nothing downstream is wired from `image_path`.\n"
+                            "Note: Leave unconnected if you wire `image_path` into your Save Image node."
+                        ),
                     },
                 ),
             },
             "hidden": {
                 "unique_id": "UNIQUE_ID",
+                "prompt": "PROMPT",
             },
         }
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("text", "filepath")
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("image_path", "text", "filepath")
     FUNCTION = "save_prompt_txt"
     OUTPUT_NODE = True
     CATEGORY = f"{SUITE_CATEGORY}/IO"
@@ -292,12 +417,14 @@ class WFA_SavePromptTxt:
     def save_prompt_txt(
         self,
         subfolder: str = "",
-        character: str = "prompt",
-        separator: str = "space",
+        character: str = "output",
+        char_folder: bool = True,
+        separator: str = "underscore",
         save_mode: str = "overwrite",
         headers: bool = False,
         enabled: bool = True,
         prompt_index=None,
+        model=None,
         lora_stack=None,
         raw_prompt: str = "",
         raw_negative: str = "",
@@ -306,10 +433,13 @@ class WFA_SavePromptTxt:
         final_negative: str = "",
         trigger=None,
         unique_id=None,
+        prompt=None,
     ):
+        model_str = _resolve_model_name(model, prompt_graph=prompt, unique_id=unique_id)
         lora_str = _format_lora_stack(lora_stack)
 
         sections = [
+            ("MODEL", model_str),
             ("USED LORAS", lora_str),
             ("RAW PROMPT", raw_prompt),
             ("RAW NEGATIVE", raw_negative),
@@ -332,16 +462,17 @@ class WFA_SavePromptTxt:
 
         full_text = "\n\n".join(blocks)
 
-        if not enabled:
-            return (full_text, "")
-
-        filepath = _resolve_target_txt_path(
+        filepath, image_path = _resolve_paths(
             subfolder=subfolder,
             character=character,
+            char_folder=char_folder,
             prompt_index=prompt_index,
             separator=separator,
             save_mode=save_mode,
         )
+
+        if not enabled:
+            return (image_path, full_text, "")
 
         if save_mode == "append" and os.path.exists(filepath) and os.path.getsize(filepath) > 0:
             with open(filepath, "a", encoding="utf-8") as f:
@@ -369,7 +500,7 @@ class WFA_SavePromptTxt:
                 },
             )
 
-        return (full_text, filepath)
+        return (image_path, full_text, filepath)
 
 
 NODE_CLASS_MAPPINGS = {

@@ -65,7 +65,8 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
 - **Category**: `WFA Node Suite/IO`
 - **Features**:
   - Replaces 8+ string concat, `LoRA Stack -> String`, filename builder, and `Save Text` nodes with **one compact all-in-one node**.
-  - **Automatic Path & Filename Builder**: Saves directly to `<ComfyUI output>/<subfolder>/<character><separator><prompt_index>.txt` (creates missing subfolders automatically and sanitizes illegal Windows filename characters like `:`).
+  - **Automatic Sub-Subfolder & Matching `image_path` Output**: Saves to `<ComfyUI output>/<subfolder>/<character>/<character><separator><prompt_index>.txt` (when `char_folder` is enabled) and outputs **`image_path`** (`subfolder/character/character_index_`) ready to wire straight into your `Save Image` node so images and `.txt` logs always land in the same folder with matching names.
+  - **Used Model Logger (`model`)**: Connect a checkpoint/model name (`STRING` / `COMBO`) **or** wire a `MODEL` / `PIPE` link directly — automatically traces the upstream loader to log the exact `.safetensors` model filename under `[MODEL]`.
   - **Built-In `LORA_STACK` Converter**: Wire your `lora_stack` directly into `lora_stack` (no external converter node needed!) — formats `<lora:name:model_wt:clip_wt>` automatically and skips `"None"` slots.
   - **Direct `INT` or `STRING` `prompt_index` Input**: Wire your `WFA Loop Iterator` `index` straight in without needing an `INT to String` node.
   - **Dedicated Prompt Inputs**: Optional sockets for `raw_prompt`, `raw_negative`, `refined_prompt`, `final_prompt`, and `final_negative` (cleanly skips any unconnected/empty inputs, with optional `[SECTION]` `headers` toggle and `overwrite` / `append` / `auto_number` modes).
