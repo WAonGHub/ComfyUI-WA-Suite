@@ -1,0 +1,37 @@
+----------------------------------------------------------------------------------------------------
+EXAMPLE PROMPT MASTERLIST (WFA Batch Prompt Loader + WFA Prompt Label Filter)
+----------------------------------------------------------------------------------------------------
+----
+[CORE] [MODERN] [F1] Standing Outdoor Portrait
+----
+width: 896
+height: 1152
+batchsize: 1
+sdxl_lora: 0
+sdxl_strength: 0.75
+anima_lora: 0
+anima_strength: 0.75
+c1: true
+c2: false
+c3: false
+c4: false
+c5: false
+positive: 1girl, solo, standing, city street, soft sunlight, detailed background, looking at viewer, gentle smile
+negative: /*AVOID, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry, bad anatomy
+
+----
+[MODERN] [F2] Cafe Table Conversation
+----
+size: 1152x896 | sdxl_lora: 1:0.6 | anima_lora: 1:0.6 | chars: C1, C2
+positive: 2girls, sitting at cafe table, coffee cups, warm indoor lighting, depth of field, talking
+negative: /*AVOID, *//*C2BODY, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry, extra digits
+
+----
+[MEDIEVAL] [F1] [M1] Forest Path Encounter
+----
+width: 1024
+hight: 1024
+c1: true
+c2: true
+positive: 1girl, 1boy, forest trail, dappled sunlight, stone bridge, scenic fantasy environment, cinematic composition
+negative: /*AVOID, *//*C2BODY, *//*SCENEneg, *//*NEGATIVE, */lowres, watermark, modern objects

@@ -25,6 +25,7 @@ try:
 except ImportError:
     model_management = None
 
+from .prompts import list_prompt_files, parse_prompt_text, resolve_prompt_file_path
 from .utils import SUITE_CATEGORY, any_type
 
 _POWER_LOCK = threading.Lock()
@@ -293,22 +294,9 @@ _INSPIRE_BLOCK_RE = re.compile(
 
 def _get_inspire_prompt_files() -> list[str]:
     files_list = ["<use connected prompts wire>"]
-    if folder_paths is None:
-        return files_list
-    try:
-        prompts_paths = folder_paths.get_folder_paths("inspire_prompts")
-        for prompts_path in prompts_paths:
-            if not os.path.isdir(prompts_path):
-                continue
-            for root, _dirs, files in os.walk(prompts_path):
-                for file in files:
-                    if file.endswith(".txt"):
-                        file_path = os.path.join(root, file)
-                        rel_path = os.path.relpath(file_path, prompts_path)
-                        if rel_path not in files_list:
-                            files_list.append(rel_path)
-    except Exception:
-        pass
+    for rel_path in list_prompt_files():
+        if rel_path not in files_list:
+            files_list.append(rel_path)
     return files_list
 
 
@@ -318,7 +306,7 @@ def _count_prompts_in_string(text: str, mode: str) -> int:
 
     is_auto = mode.startswith("auto")
 
-    # 1. Inspire Pack format (`---` separated blocks or `positive:` blocks)
+    # 1. Inspire / WFA Batch Prompt format (`---` separated blocks or `positive:` blocks)
     if mode.startswith("inspire") or (
         is_auto
         and (
@@ -326,15 +314,10 @@ def _count_prompts_in_string(text: str, mode: str) -> int:
             or re.search(r"(?:^|\n)\s*positive\s*:", text, re.IGNORECASE)
         )
     ):
+        if re.search(r"(?:^|\n)\s*positive\s*:", text, re.IGNORECASE):
+            return len(parse_prompt_text(text)["entries"])
         blocks = _INSPIRE_SPLIT_RE.split(text)
-        valid_blocks = 0
-        for b in blocks:
-            b_str = b.strip()
-            if not b_str:
-                continue
-            if _INSPIRE_BLOCK_RE.search(b_str) or not re.search(r"(?:^|\n)\s*positive\s*:", text, re.IGNORECASE):
-                valid_blocks += 1
-        return valid_blocks
+        return sum(1 for b in blocks if b.strip())
 
     # 2. Impact StringSelector `#` multiline blocks
     if mode.startswith("hash"):
@@ -458,6 +441,8 @@ class WFA_PromptCounter:
                 single = prompts[0]
                 if isinstance(single, str):
                     count = _count_prompts_in_string(single, mode_str)
+                elif isinstance(single, dict) and "entries" in single:
+                    count = len(single["entries"])
                 elif isinstance(single, (list, tuple)):
                     # Check if single is one Inspire ZIPPED_PROMPT tuple: (pos_str, neg_str, name_str)
                     if (
@@ -469,20 +454,14 @@ class WFA_PromptCounter:
                         count = len(single)
                 elif single is not None:
                     count = 1
-        elif (
-            file_choice
-            and file_choice != "<use connected prompts wire>"
-            and folder_paths is not None
-        ):
-            # Read directly from Inspire Pack prompt file if selected
+        elif file_choice and file_choice != "<use connected prompts wire>":
+            # Read directly from Inspire Pack or WFA Suite prompt file if selected
             try:
-                for d in folder_paths.get_folder_paths("inspire_prompts"):
-                    candidate = os.path.join(d, file_choice)
-                    if os.path.isfile(candidate):
-                        with open(candidate, "r", encoding="utf-8") as f:
-                            data = f.read()
-                        count = _count_prompts_in_string(data, "inspire format (--- separated blocks)")
-                        break
+                candidate = resolve_prompt_file_path(file_choice)
+                if candidate and os.path.isfile(candidate):
+                    with open(candidate, "r", encoding="utf-8", errors="ignore") as f:
+                        data = f.read()
+                    count = _count_prompts_in_string(data, "inspire format (--- separated blocks)")
             except Exception:
                 count = 0
 

@@ -71,6 +71,40 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - **Direct `INT` or `STRING` `prompt_index` Input**: Wire your `WFA Loop Iterator` `index` straight in without needing an `INT to String` node.
   - **Dedicated Prompt Inputs**: Optional sockets for `raw_prompt`, `raw_negative`, `refined_prompt`, `final_prompt`, and `final_negative` (cleanly skips any unconnected/empty inputs, with optional `[SECTION]` `headers` toggle and `overwrite` / `append` / `auto_number` modes).
 
+### 7. `WFA Batch Prompt Loader ⚡` & `WFA Prompt Label Filter ⚡ (WFA Suite)`
+- **Category**: `WFA Node Suite/Prompts`
+- **Features**:
+  - **`WFA Batch Prompt Loader ⚡`**: Single-node, zero-warning replacement for Inspire Pack's `Load Prompts From File` + `Unzip Prompt` + 9+ embedded regex extractor nodes:
+    - **Title-Aware & Zero Console Spam**: Natively understands `----\nTITLE\n----` headers, top banners, and trailing scratchpad notes without printing `invalid prompt format` warnings in the console.
+    - **Clean `key: value` Sections + 5-Character Future-Proofing**: Directly parses `width:`, `height:` (or `hight:`), `size:` (`896x1152`), `batchsize:`, `sdxl_lora:`, `sdxl_strength:`, `anima_lora:`, `anima_strength:`, and up to **5 character toggles** (`c1:`–`c5:` or `chars: C1, C2`) right out of each prompt block.
+    - **100% Backwards-Compatible Legacy Parsing**: Automatically extracts existing `/*{{{width}}}[[[height]]][[{batch}]][{{sdxl_idx}}]{[{sdxl_str}]}[}{anima_idx}{]{[}anima_str{]}[{[c1]}]{[[c2]]}*/` negative metadata blocks and strips only that control block while preserving `/*AVOID, */` and all other Find & Replace placeholders.
+    - **Standalone or Filter-Controlled**: Works completely standalone (`prompt_file` + `index`) OR controlled via the `label_filter` wire from **`WFA Prompt Label Filter ⚡`**. Automatically discovers `.txt` files from both `ComfyUI-WA-Suite/prompts/` and `ComfyUI-Inspire-Pack/prompts/` with sub-millisecond RAM mtime caching.
+  - **`WFA Prompt Label Filter ⚡`**: Clean dark-themed cockpit UI node designed to sit directly inside your ComfyUI dashboard:
+    - **Auto-Detects Extendable `[LABEL]` Tags**: Scans all prompt titles in the selected `.txt` file for bracket labels (e.g. `[CORE]`, `[MODERN]`, `[MEDIEVAL]`, `[GS]`, `[PREG]`, `[TAIL]`, `[F1]`–`[F3]`, `[M1]`–`[M2]`, or any new `[CUSTOM]` tag you invent on demand) and renders interactive checkboxes with per-label prompt counts.
+    - **Live Prompt Counter & Quick Controls**: Shows real-time **`● Active: X / Y`** count before you even queue, with **`All`**, **`None`**, **`Inv`**, **`↻`** (disk rescan), and `Ctrl+Click` to solo any label.
+    - **3 Filter Modes**: **`Allowed Only`** (skips any prompt carrying an unchecked label), **`Match ANY (OR)`**, and **`Match ALL (AND)`**.
+    - **Zero-Cycle Wiring with Loop Iterator**: Connect `WFA Prompt Label Filter.end_index` $\rightarrow$ `WFA Loop Iterator.end_index`, `WFA Prompt Label Filter.label_filter` $\rightarrow$ `WFA Batch Prompt Loader.label_filter`, and `WFA Loop Iterator.index` $\rightarrow$ `WFA Batch Prompt Loader.index`.
+
+#### Example `.txt` Prompt Format
+```text
+----
+[CORE] [MODERN] [F1] Standing Outdoor Portrait
+----
+width: 896
+height: 1152
+sdxl_lora: 2
+sdxl_strength: 0.5
+anima_lora: 1
+anima_strength: 0.5
+c1: true
+c2: false
+c3: false
+c4: false
+c5: false
+positive: 1girl, solo, standing, city street, soft sunlight
+negative: /*AVOID, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry
+```
+
 ## Installation
 
 ### Via ComfyUI-Manager
