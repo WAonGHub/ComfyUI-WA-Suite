@@ -2,8 +2,10 @@ import { app } from "../../../scripts/app.js";
 import { api } from "../../../scripts/api.js";
 
 const ITERATOR_CLASS = "WFA_LoopIterator";
+const SHUTDOWN_ITERATOR_CLASS = "WFA_LoopIteratorShutdown";
 const COUNTER_CLASS = "WFA_PromptCounter";
-const TARGET_CLASSES = new Set([ITERATOR_CLASS, COUNTER_CLASS]);
+const ITERATOR_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS]);
+const TARGET_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS, COUNTER_CLASS]);
 
 const pendingSteps = new Map();
 let runWasAborted = false;
@@ -30,16 +32,55 @@ function getWidgetValue(node, name, fallback) {
     return w && w.value !== undefined ? w.value : fallback;
 }
 
+function updateResetButtonAppearance(node) {
+    const btn = node?.widgets?.find((w) => w._wfaResetBtn || w.name === "Reset Counter");
+    if (!btn) return;
+    if (node._wfaCountdownActive && node._wfaCountdownRemaining > 0) {
+        const lbl = `✖ ABORT SHUTDOWN (${node._wfaCountdownRemaining}s)`;
+        btn.name = lbl;
+        btn.label = lbl;
+    } else {
+        btn.name = "Reset Counter";
+        btn.label = "↺ Reset Counter";
+    }
+}
+
+async function cancelPendingShutdown(node) {
+    try {
+        await api.fetchApi("/wfa/cancel_power", { method: "POST" });
+    } catch (_) {}
+    if (node) {
+        node._wfaCountdownActive = false;
+        node._wfaCountdownRemaining = 0;
+        updateResetButtonAppearance(node);
+        node._wfaIteratorStatus = {
+            text: "✓ Completed • Auto-Shutdown Aborted",
+            progress: 1,
+            done: true,
+            warning: false,
+        };
+        node.setDirtyCanvas?.(true, true);
+        app.graph?.setDirtyCanvas?.(true, true);
+    }
+}
+
 function resetIteratorNode(node) {
     if (!node) return;
+    if (node._wfaCountdownActive) {
+        cancelPendingShutdown(node);
+    }
     const resetTo = Number(getWidgetValue(node, "reset_to", 0)) || 0;
     setWidgetValue(node, "index", resetTo);
     setWidgetValue(node, "current_loop", 1);
     pendingSteps.delete(String(node.id));
+    node._wfaCountdownActive = false;
+    node._wfaCountdownRemaining = 0;
+    updateResetButtonAppearance(node);
     node._wfaIteratorStatus = {
         text: `Ready • Start at ${resetTo}`,
         progress: 0,
         done: false,
+        warning: false,
     };
     node.setDirtyCanvas?.(true, true);
     app.graph?.setDirtyCanvas?.(true, true);
@@ -54,9 +95,13 @@ app.registerExtension({
 
         const handleAbort = () => {
             runWasAborted = true;
+            api.fetchApi("/wfa/cancel_power", { method: "POST" }).catch(() => {});
             for (const [nodeId] of pendingSteps.entries()) {
                 const node = getNodeById(nodeId);
                 if (node) {
+                    node._wfaCountdownActive = false;
+                    node._wfaCountdownRemaining = 0;
+                    updateResetButtonAppearance(node);
                     const curIdx = getWidgetValue(node, "index", 0);
                     const curLoop = getWidgetValue(node, "current_loop", 1);
                     const totLoops = getWidgetValue(node, "total_loops", 1);
@@ -64,6 +109,7 @@ app.registerExtension({
                         text: `Paused at Index ${curIdx} (Loop ${curLoop}/${totLoops})`,
                         progress: node._wfaIteratorStatus?.progress || 0,
                         done: false,
+                        warning: false,
                     };
                     node.setDirtyCanvas?.(true, true);
                 }
@@ -82,9 +128,60 @@ app.registerExtension({
                     text: `${detail.count} Prompts • end_index: ${detail.end_index}`,
                     progress: 1,
                     done: true,
+                    warning: false,
                 };
                 node.setDirtyCanvas?.(true, true);
             }
+        });
+
+        api.addEventListener("wfa-power-countdown", ({ detail }) => {
+            if (!detail || detail.node_id == null) return;
+            const node = getNodeById(String(detail.node_id));
+            if (!node) return;
+
+            if (detail.cancelled) {
+                node._wfaCountdownActive = false;
+                node._wfaCountdownRemaining = 0;
+                updateResetButtonAppearance(node);
+                node._wfaIteratorStatus = {
+                    text: `✓ ${detail.reason || "Auto-Shutdown Aborted"}`,
+                    progress: 1,
+                    done: true,
+                    warning: false,
+                };
+                node.setDirtyCanvas?.(true, true);
+                app.graph?.setDirtyCanvas?.(true, true);
+                return;
+            }
+
+            if (detail.executing_now) {
+                node._wfaCountdownActive = false;
+                node._wfaCountdownRemaining = 0;
+                updateResetButtonAppearance(node);
+                node._wfaIteratorStatus = {
+                    text: `⚡ Executing: ${detail.action}...`,
+                    progress: 1,
+                    done: false,
+                    warning: true,
+                };
+                node.setDirtyCanvas?.(true, true);
+                app.graph?.setDirtyCanvas?.(true, true);
+                return;
+            }
+
+            const rem = Number(detail.remaining) || 0;
+            const tot = Math.max(1, Number(detail.total) || 60);
+            node._wfaCountdownActive = true;
+            node._wfaCountdownRemaining = rem;
+            updateResetButtonAppearance(node);
+            node._wfaIteratorStatus = {
+                text: `⚠ ${detail.action} in ${rem}s • Click button to Abort`,
+                progress: Math.min(1, Math.max(0, rem / tot)),
+                done: false,
+                warning: true,
+            };
+            node.setDirtyCanvas?.(true, true);
+            app.graph?.setDirtyCanvas?.(true, true);
         });
 
         api.addEventListener("wfa-loop-iterator-step", ({ detail }) => {
@@ -94,6 +191,10 @@ app.registerExtension({
 
             const node = getNodeById(nodeIdStr);
             if (node) {
+                node._wfaCountdownActive = false;
+                node._wfaCountdownRemaining = 0;
+                updateResetButtonAppearance(node);
+
                 // Keep widget on current_index while generating so connected WFA switches highlight the active row
                 setWidgetValue(node, "index", detail.current_index);
                 setWidgetValue(node, "current_loop", detail.current_loop);
@@ -109,6 +210,7 @@ app.registerExtension({
                     text: `Loop ${detail.current_loop}/${detail.total_loops} • Index ${detail.current_index}/${detail.end_index}`,
                     progress,
                     done: false,
+                    warning: false,
                 };
                 node.setDirtyCanvas?.(true, true);
                 app.graph?.setDirtyCanvas?.(true, true);
@@ -137,11 +239,23 @@ app.registerExtension({
                 setWidgetValue(node, "current_loop", step.next_loop);
 
                 if (step.finished_all) {
-                    node._wfaIteratorStatus = {
-                        text: `✓ Completed ${step.total_loops}/${step.total_loops} Loops (Reset to ${step.reset_to})`,
-                        progress: 1,
-                        done: true,
-                    };
+                    const actionVal = String(getWidgetValue(node, "on_complete", "Do Nothing"));
+                    if (node.comfyClass === SHUTDOWN_ITERATOR_CLASS && !actionVal.startsWith("Do Nothing")) {
+                        const delaySec = Number(getWidgetValue(node, "shutdown_delay_sec", 60)) || 60;
+                        node._wfaIteratorStatus = {
+                            text: `✓ All Loops Done • Starting ${delaySec}s Power Countdown...`,
+                            progress: 1,
+                            done: false,
+                            warning: true,
+                        };
+                    } else {
+                        node._wfaIteratorStatus = {
+                            text: `✓ Completed ${step.total_loops}/${step.total_loops} Loops (Reset to ${step.reset_to})`,
+                            progress: 1,
+                            done: true,
+                            warning: false,
+                        };
+                    }
                 } else {
                     const liveAutoQueue = Boolean(getWidgetValue(node, "auto_queue", true));
                     if (step.should_requeue && liveAutoQueue) {
@@ -151,6 +265,7 @@ app.registerExtension({
                             text: `Next: Index ${step.next_index} (Loop ${step.next_loop}/${step.total_loops})`,
                             progress: node._wfaIteratorStatus?.progress || 0,
                             done: false,
+                            warning: false,
                         };
                     }
                 }
@@ -167,23 +282,28 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData) {
         if (!TARGET_CLASSES.has(nodeData.name)) return;
 
-        if (nodeData.name === ITERATOR_CLASS) {
+        if (ITERATOR_CLASSES.has(nodeData.name)) {
             const origOnNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
 
                 if (!this.widgets?.some((w) => w._wfaResetBtn || w.name === "Reset Counter" || w.name === "_wfa_reset_btn")) {
                     const btn = this.addWidget("button", "Reset Counter", null, () => {
-                        resetIteratorNode(this);
+                        if (this._wfaCountdownActive) {
+                            cancelPendingShutdown(this);
+                        } else {
+                            resetIteratorNode(this);
+                        }
                     });
                     btn.label = "↺ Reset Counter";
                     btn._wfaResetBtn = true;
                     btn.serialize = false;
                 }
 
-                if (!this.size || this.size[0] < 310) {
-                    const sz = this.computeSize ? this.computeSize() : [320, 250];
-                    this.size = [Math.max(320, sz[0]), sz[1]];
+                const minW = nodeData.name === SHUTDOWN_ITERATOR_CLASS ? 350 : 320;
+                if (!this.size || this.size[0] < minW) {
+                    const sz = this.computeSize ? this.computeSize() : [minW, 280];
+                    this.size = [Math.max(minW, sz[0]), sz[1]];
                 }
                 return res;
             };
@@ -193,13 +313,20 @@ app.registerExtension({
                 if (origGetExtraMenuOptions) {
                     origGetExtraMenuOptions.apply(this, arguments);
                 }
-                options.unshift(
+                const extraItems = [
                     {
                         content: "⚡ Reset Iterator to Start (reset_to & Loop 1)",
                         callback: () => resetIteratorNode(this),
                     },
-                    null
-                );
+                ];
+                if (nodeData.name === SHUTDOWN_ITERATOR_CLASS) {
+                    extraItems.unshift({
+                        content: "✖ Abort Scheduled Shutdown / Power Action",
+                        callback: () => cancelPendingShutdown(this),
+                    });
+                }
+                extraItems.push(null);
+                options.unshift(...extraItems);
             };
         }
 
@@ -223,8 +350,8 @@ app.registerExtension({
 
             // Background pill
             ctx.fillStyle = "#18181b";
-            ctx.strokeStyle = status.done ? "#4ade80" : "#3f3f46";
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = status.warning ? "#ef4444" : status.done ? "#4ade80" : "#3f3f46";
+            ctx.lineWidth = status.warning ? 1.5 : 1;
             ctx.beginPath();
             ctx.roundRect(0, pillY, pillW, pillH, 5);
             ctx.fill();
@@ -236,15 +363,17 @@ app.registerExtension({
                 ctx.beginPath();
                 ctx.roundRect(0, pillY, pillW, pillH, 5);
                 ctx.clip();
-                ctx.fillStyle = status.done
-                    ? "rgba(74, 222, 128, 0.28)"
-                    : "rgba(56, 189, 248, 0.25)";
+                ctx.fillStyle = status.warning
+                    ? "rgba(239, 68, 68, 0.30)"
+                    : status.done
+                      ? "rgba(74, 222, 128, 0.28)"
+                      : "rgba(56, 189, 248, 0.25)";
                 ctx.fillRect(0, pillY, pillW * status.progress, pillH);
                 ctx.restore();
             }
 
             // Status text
-            ctx.fillStyle = status.done ? "#4ade80" : "#f4f4f6";
+            ctx.fillStyle = status.warning ? "#fca5a5" : status.done ? "#4ade80" : "#f4f4f6";
             ctx.textBaseline = "middle";
             ctx.fillText(status.text, 8, pillY + pillH / 2);
             ctx.restore();

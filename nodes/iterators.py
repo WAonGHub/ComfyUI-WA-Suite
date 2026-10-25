@@ -1,5 +1,9 @@
 import os
 import re
+import subprocess
+import sys
+import threading
+import time
 
 try:
     import folder_paths
@@ -7,11 +11,277 @@ except ImportError:
     folder_paths = None
 
 try:
+    from aiohttp import web
+except ImportError:
+    web = None
+
+try:
     from server import PromptServer
 except ImportError:
     PromptServer = None
 
+try:
+    import comfy.model_management as model_management
+except ImportError:
+    model_management = None
+
 from .utils import SUITE_CATEGORY, any_type
+
+_POWER_LOCK = threading.Lock()
+_POWER_STATE = {
+    "generation": 0,
+    "cancel_event": threading.Event(),
+    "active_node_id": None,
+}
+
+
+def _cancel_pending_power_action(reason: str = "Shutdown aborted by user.") -> str | None:
+    with _POWER_LOCK:
+        _POWER_STATE["generation"] += 1
+        _POWER_STATE["cancel_event"].set()
+        node_id = _POWER_STATE["active_node_id"]
+        _POWER_STATE["active_node_id"] = None
+
+    if os.name == "nt":
+        try:
+            subprocess.Popen(
+                ["shutdown", "/a"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+        except Exception:
+            pass
+
+    if node_id is not None and PromptServer is not None and getattr(PromptServer, "instance", None) is not None:
+        try:
+            PromptServer.instance.send_sync(
+                "wfa-power-countdown",
+                {
+                    "node_id": str(node_id),
+                    "cancelled": True,
+                    "reason": reason,
+                },
+            )
+        except Exception:
+            pass
+    return node_id
+
+
+if PromptServer is not None and getattr(PromptServer, "instance", None) is not None and web is not None:
+    try:
+        @PromptServer.instance.routes.post("/wfa/cancel_power")
+        async def _wfa_cancel_power_route(request):
+            node_id = _cancel_pending_power_action("Shutdown aborted by user.")
+            return web.json_response({"ok": True, "node_id": node_id})
+    except Exception:
+        pass
+
+
+def _execute_system_power_action(action: str) -> None:
+    # Free GPU VRAM and flush output streams cleanly before closing ComfyUI / powering off
+    if model_management is not None:
+        try:
+            model_management.unload_all_models()
+            model_management.soft_empty_cache()
+        except Exception:
+            pass
+
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+
+    no_win_flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+    if action == "Close ComfyUI & Shut Down PC":
+        if os.name == "nt":
+            subprocess.Popen(
+                [
+                    "shutdown",
+                    "/s",
+                    "/f",
+                    "/t",
+                    "5",
+                    "/c",
+                    "WFA Loop Iterator finished all generations — shutting down PC.",
+                ],
+                creationflags=no_win_flag,
+            )
+        else:
+            subprocess.Popen(["shutdown", "-h", "now"])
+        time.sleep(1.0)
+        os._exit(0)
+
+    elif action == "Close ComfyUI & Sleep PC":
+        if os.name == "nt":
+            subprocess.Popen(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    "Start-Sleep -Seconds 2; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Application]::SetSuspendState('Suspend', $false, $false)",
+                ],
+                creationflags=no_win_flag,
+            )
+        else:
+            subprocess.Popen(["systemctl", "suspend"])
+        time.sleep(0.5)
+        os._exit(0)
+
+    elif action == "Close ComfyUI & Hibernate PC":
+        if os.name == "nt":
+            subprocess.Popen(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-WindowStyle",
+                    "Hidden",
+                    "-Command",
+                    "Start-Sleep -Seconds 2; shutdown /h",
+                ],
+                creationflags=no_win_flag,
+            )
+        else:
+            subprocess.Popen(["systemctl", "hibernate"])
+        time.sleep(0.5)
+        os._exit(0)
+
+    elif action == "Close ComfyUI Only (Keep PC On)":
+        time.sleep(0.5)
+        os._exit(0)
+
+
+def _start_power_watchdog(node_id: str, action: str, delay_sec: int, target_prompt_id: str | None) -> None:
+    if not action or action.startswith("Do Nothing"):
+        return
+    if PromptServer is None or getattr(PromptServer, "instance", None) is None:
+        return
+
+    with _POWER_LOCK:
+        _POWER_STATE["generation"] += 1
+        my_gen = _POWER_STATE["generation"]
+        _POWER_STATE["cancel_event"].set()
+        cancel_event = threading.Event()
+        _POWER_STATE["cancel_event"] = cancel_event
+        _POWER_STATE["active_node_id"] = str(node_id)
+
+    delay_sec = max(5, int(delay_sec))
+
+    def _worker():
+        server = getattr(PromptServer, "instance", None)
+        pq = getattr(server, "prompt_queue", None) if server is not None else None
+        if server is None or pq is None:
+            return
+
+        # Phase 1: Wait until the final generation (KSampler, Refiners, SaveImage, etc.) 100% completes
+        while True:
+            if cancel_event.is_set() or _POWER_STATE["generation"] != my_gen:
+                return
+
+            if model_management is not None:
+                try:
+                    if model_management.processing_interrupted():
+                        _cancel_pending_power_action("Final generation interrupted — shutdown cancelled.")
+                        return
+                except Exception:
+                    pass
+
+            try:
+                running, queued = pq.get_current_queue_volatile()
+            except Exception:
+                running, queued = [], []
+
+            running_ids = [item[1] for item in running if len(item) > 1]
+
+            if target_prompt_id and target_prompt_id in running_ids:
+                time.sleep(0.4)
+                continue
+
+            if target_prompt_id:
+                try:
+                    hist = pq.get_history(prompt_id=target_prompt_id) or {}
+                    entry = hist.get(target_prompt_id)
+                    if entry is not None:
+                        status_dict = entry.get("status") or {}
+                        if status_dict.get("status_str") != "success" or not status_dict.get("completed", False):
+                            _cancel_pending_power_action("Final run did not complete cleanly — shutdown cancelled.")
+                            return
+                except Exception:
+                    pass
+
+            if len(running) == 0 and len(queued) == 0:
+                break
+
+            time.sleep(0.4)
+
+        # Brief grace pause so frontend processes `executing(null)`, resets widgets, and renders final saved image
+        for _ in range(6):
+            if cancel_event.is_set() or _POWER_STATE["generation"] != my_gen:
+                return
+            time.sleep(0.25)
+
+        # Phase 2: Live cancelable countdown
+        for remaining in range(delay_sec, 0, -1):
+            if cancel_event.is_set() or _POWER_STATE["generation"] != my_gen:
+                return
+            try:
+                if pq.get_tasks_remaining() > 0:
+                    _cancel_pending_power_action("New generation started — shutdown cancelled.")
+                    return
+            except Exception:
+                pass
+
+            try:
+                server.send_sync(
+                    "wfa-power-countdown",
+                    {
+                        "node_id": str(node_id),
+                        "remaining": remaining,
+                        "total": delay_sec,
+                        "action": action,
+                        "cancelled": False,
+                    },
+                )
+            except Exception:
+                pass
+
+            for _ in range(4):
+                if cancel_event.is_set() or _POWER_STATE["generation"] != my_gen:
+                    return
+                time.sleep(0.25)
+
+        if cancel_event.is_set() or _POWER_STATE["generation"] != my_gen:
+            return
+        try:
+            if pq.get_tasks_remaining() > 0:
+                _cancel_pending_power_action("New generation started — shutdown cancelled.")
+                return
+        except Exception:
+            pass
+
+        try:
+            server.send_sync(
+                "wfa-power-countdown",
+                {
+                    "node_id": str(node_id),
+                    "remaining": 0,
+                    "total": delay_sec,
+                    "action": action,
+                    "executing_now": True,
+                    "cancelled": False,
+                },
+            )
+        except Exception:
+            pass
+
+        _execute_system_power_action(action)
+
+    t = threading.Thread(target=_worker, name="WFA-PowerWatchdog", daemon=True)
+    t.start()
 
 _COMMENT_ONLY_RE = re.compile(r"^\s*/\*\s*\d+\s*\*/\s*$")
 _INSPIRE_SPLIT_RE = re.compile(r"\n\s*-+\s*\n")
@@ -398,12 +668,134 @@ class WFA_LoopIterator:
         return (active_index, active_loop, total_loops)
 
 
+class WFA_LoopIteratorShutdown(WFA_LoopIterator):
+    """
+    WFA Loop Iterator (Auto-Shutdown): Copy of WFA Loop Iterator with overnight power-saving
+    automation. After the very last loop & index finishes generating AND saving its final image,
+    runs a cancelable safety countdown and cleanly closes ComfyUI + shuts down / sleeps / hibernates your PC.
+    """
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        base = WFA_LoopIterator.INPUT_TYPES()
+        req = dict(base["required"])
+        req["on_complete"] = (
+            [
+                "Close ComfyUI & Shut Down PC",
+                "Close ComfyUI & Sleep PC",
+                "Close ComfyUI & Hibernate PC",
+                "Close ComfyUI Only (Keep PC On)",
+                "Do Nothing (Disabled)",
+            ],
+            {
+                "default": "Close ComfyUI & Shut Down PC",
+                "tooltip": (
+                    "Action to perform AFTER the final generation in the final loop completely finishes saving:\n"
+                    "• Close ComfyUI & Shut Down PC: Unloads VRAM, closes ComfyUI cleanly, and powers off your PC.\n"
+                    "• Close ComfyUI & Sleep PC: Closes ComfyUI cleanly and puts your PC into low-power Sleep.\n"
+                    "• Close ComfyUI & Hibernate PC: Closes ComfyUI cleanly and hibernates your PC.\n"
+                    "• Close ComfyUI Only: Closes ComfyUI (dropping GPU power to idle) while keeping Windows running.\n"
+                    "• Do Nothing (Disabled): Behaves identically to the standard WFA Loop Iterator."
+                ),
+            },
+        )
+        req["shutdown_delay_sec"] = (
+            "INT",
+            {
+                "default": 60,
+                "min": 5,
+                "max": 3600,
+                "step": 5,
+                "tooltip": (
+                    "Safety countdown (in seconds) AFTER the final image finishes saving before power-off triggers.\n"
+                    "During this countdown, you can click '✖ ABORT SHUTDOWN' right on the node to cancel."
+                ),
+            },
+        )
+        return {
+            "required": req,
+            "optional": dict(base["optional"]),
+            "hidden": dict(base["hidden"]),
+        }
+
+    def iterate(
+        self,
+        index: int = 0,
+        reset_to: int = 0,
+        end_index: int = 10,
+        step: int = 1,
+        total_loops: int = 3,
+        current_loop: int = 1,
+        auto_queue: bool = True,
+        on_complete: str = "Close ComfyUI & Shut Down PC",
+        shutdown_delay_sec: int = 60,
+        trigger_signal=None,
+        unique_id=None,
+    ):
+        step_val = max(1, int(step))
+        total_loops_val = max(1, int(total_loops))
+        reset_to_val = max(0, int(reset_to))
+        end_index_val = max(reset_to_val, int(end_index))
+
+        active_index = int(index)
+        if active_index > end_index_val:
+            active_index = reset_to_val
+        active_loop = max(1, min(int(current_loop), total_loops_val))
+
+        is_final_step = (active_index + step_val > end_index_val) and (active_loop >= total_loops_val)
+
+        if not is_final_step and _POWER_STATE["active_node_id"] is not None:
+            _cancel_pending_power_action("New iterator step started.")
+
+        result = super().iterate(
+            index=index,
+            reset_to=reset_to,
+            end_index=end_index,
+            step=step,
+            total_loops=total_loops,
+            current_loop=current_loop,
+            auto_queue=auto_queue,
+            trigger_signal=trigger_signal,
+            unique_id=unique_id,
+        )
+
+        if (
+            is_final_step
+            and on_complete
+            and not on_complete.startswith("Do Nothing")
+            and PromptServer is not None
+            and getattr(PromptServer, "instance", None) is not None
+            and unique_id is not None
+        ):
+            uid = unique_id[0] if isinstance(unique_id, list) else unique_id
+            target_prompt_id = None
+            try:
+                pq = getattr(PromptServer.instance, "prompt_queue", None)
+                if pq is not None:
+                    running, _ = pq.get_current_queue_volatile()
+                    if running and len(running[0]) > 1:
+                        target_prompt_id = running[0][1]
+            except Exception:
+                target_prompt_id = None
+
+            _start_power_watchdog(
+                node_id=str(uid),
+                action=on_complete,
+                delay_sec=int(shutdown_delay_sec),
+                target_prompt_id=target_prompt_id,
+            )
+
+        return result
+
+
 NODE_CLASS_MAPPINGS = {
     "WFA_LoopIterator": WFA_LoopIterator,
+    "WFA_LoopIteratorShutdown": WFA_LoopIteratorShutdown,
     "WFA_PromptCounter": WFA_PromptCounter,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "WFA_LoopIterator": "WFA Loop Iterator ⚡ (WFA Suite)",
+    "WFA_LoopIteratorShutdown": "WFA Loop Iterator (Auto-Shutdown) ⚡ (WFA Suite)",
     "WFA_PromptCounter": "WFA Prompt Counter ⚡ (WFA Suite)",
 }
