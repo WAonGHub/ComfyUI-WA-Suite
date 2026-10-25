@@ -95,7 +95,7 @@ def _execute_system_power_action(action: str) -> None:
 
     no_win_flag = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
-    if action == "Close ComfyUI & Shut Down PC":
+    if action in ("Shut Down PC", "Close ComfyUI & Shut Down PC"):
         if os.name == "nt":
             subprocess.Popen(
                 [
@@ -114,7 +114,7 @@ def _execute_system_power_action(action: str) -> None:
         time.sleep(1.0)
         os._exit(0)
 
-    elif action == "Close ComfyUI & Sleep PC":
+    elif action in ("Sleep PC", "Close ComfyUI & Sleep PC"):
         if os.name == "nt":
             subprocess.Popen(
                 [
@@ -132,7 +132,7 @@ def _execute_system_power_action(action: str) -> None:
         time.sleep(0.5)
         os._exit(0)
 
-    elif action == "Close ComfyUI & Hibernate PC":
+    elif action in ("Hibernate PC", "Close ComfyUI & Hibernate PC"):
         if os.name == "nt":
             subprocess.Popen(
                 [
@@ -150,7 +150,7 @@ def _execute_system_power_action(action: str) -> None:
         time.sleep(0.5)
         os._exit(0)
 
-    elif action == "Close ComfyUI Only (Keep PC On)":
+    elif action in ("Close ComfyUI", "Close ComfyUI Only (Keep PC On)"):
         time.sleep(0.5)
         os._exit(0)
 
@@ -679,27 +679,27 @@ class WFA_LoopIteratorShutdown(WFA_LoopIterator):
     def INPUT_TYPES(cls):
         base = WFA_LoopIterator.INPUT_TYPES()
         req = dict(base["required"])
-        req["on_complete"] = (
+        req["after_run"] = (
             [
-                "Close ComfyUI & Shut Down PC",
-                "Close ComfyUI & Sleep PC",
-                "Close ComfyUI & Hibernate PC",
-                "Close ComfyUI Only (Keep PC On)",
-                "Do Nothing (Disabled)",
+                "Shut Down PC",
+                "Sleep PC",
+                "Hibernate PC",
+                "Close ComfyUI",
+                "Do Nothing",
             ],
             {
-                "default": "Close ComfyUI & Shut Down PC",
+                "default": "Shut Down PC",
                 "tooltip": (
                     "Action to perform AFTER the final generation in the final loop completely finishes saving:\n"
-                    "• Close ComfyUI & Shut Down PC: Unloads VRAM, closes ComfyUI cleanly, and powers off your PC.\n"
-                    "• Close ComfyUI & Sleep PC: Closes ComfyUI cleanly and puts your PC into low-power Sleep.\n"
-                    "• Close ComfyUI & Hibernate PC: Closes ComfyUI cleanly and hibernates your PC.\n"
-                    "• Close ComfyUI Only: Closes ComfyUI (dropping GPU power to idle) while keeping Windows running.\n"
-                    "• Do Nothing (Disabled): Behaves identically to the standard WFA Loop Iterator."
+                    "• Shut Down PC: Unloads VRAM, closes ComfyUI cleanly, and powers off your PC.\n"
+                    "• Sleep PC: Closes ComfyUI cleanly and puts your PC into low-power Sleep.\n"
+                    "• Hibernate PC: Closes ComfyUI cleanly and hibernates your PC.\n"
+                    "• Close ComfyUI: Closes ComfyUI (dropping GPU power to idle) while keeping Windows running.\n"
+                    "• Do Nothing: Behaves identically to the standard WFA Loop Iterator."
                 ),
             },
         )
-        req["shutdown_delay_sec"] = (
+        req["delay_sec"] = (
             "INT",
             {
                 "default": 60,
@@ -718,6 +718,10 @@ class WFA_LoopIteratorShutdown(WFA_LoopIterator):
             "hidden": dict(base["hidden"]),
         }
 
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        return True
+
     def iterate(
         self,
         index: int = 0,
@@ -727,11 +731,16 @@ class WFA_LoopIteratorShutdown(WFA_LoopIterator):
         total_loops: int = 3,
         current_loop: int = 1,
         auto_queue: bool = True,
-        on_complete: str = "Close ComfyUI & Shut Down PC",
-        shutdown_delay_sec: int = 60,
+        after_run: str = "Shut Down PC",
+        delay_sec: int = 60,
         trigger_signal=None,
         unique_id=None,
+        **kwargs,
     ):
+        # Support any legacy workflow kwargs seamlessly
+        action_val = after_run or kwargs.get("on_complete", "Shut Down PC")
+        delay_val = int(kwargs.get("shutdown_delay_sec", delay_sec))
+
         step_val = max(1, int(step))
         total_loops_val = max(1, int(total_loops))
         reset_to_val = max(0, int(reset_to))
@@ -761,8 +770,8 @@ class WFA_LoopIteratorShutdown(WFA_LoopIterator):
 
         if (
             is_final_step
-            and on_complete
-            and not on_complete.startswith("Do Nothing")
+            and action_val
+            and not str(action_val).startswith("Do Nothing")
             and PromptServer is not None
             and getattr(PromptServer, "instance", None) is not None
             and unique_id is not None
@@ -780,8 +789,8 @@ class WFA_LoopIteratorShutdown(WFA_LoopIterator):
 
             _start_power_watchdog(
                 node_id=str(uid),
-                action=on_complete,
-                delay_sec=int(shutdown_delay_sec),
+                action=str(action_val),
+                delay_sec=delay_val,
                 target_prompt_id=target_prompt_id,
             )
 
@@ -796,6 +805,6 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "WFA_LoopIterator": "WFA Loop Iterator ⚡ (WFA Suite)",
-    "WFA_LoopIteratorShutdown": "WFA Loop Iterator (Auto-Shutdown) ⚡ (WFA Suite)",
+    "WFA_LoopIteratorShutdown": "WFA Loop Shutdown ⚡ (WFA Suite)",
     "WFA_PromptCounter": "WFA Prompt Counter ⚡ (WFA Suite)",
 }

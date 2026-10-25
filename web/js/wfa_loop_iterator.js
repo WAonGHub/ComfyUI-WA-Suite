@@ -239,9 +239,13 @@ app.registerExtension({
                 setWidgetValue(node, "current_loop", step.next_loop);
 
                 if (step.finished_all) {
-                    const actionVal = String(getWidgetValue(node, "on_complete", "Do Nothing"));
+                    const actionVal = String(
+                        getWidgetValue(node, "after_run", getWidgetValue(node, "on_complete", "Do Nothing"))
+                    );
                     if (node.comfyClass === SHUTDOWN_ITERATOR_CLASS && !actionVal.startsWith("Do Nothing")) {
-                        const delaySec = Number(getWidgetValue(node, "shutdown_delay_sec", 60)) || 60;
+                        const delaySec =
+                            Number(getWidgetValue(node, "delay_sec", getWidgetValue(node, "shutdown_delay_sec", 60))) ||
+                            60;
                         node._wfaIteratorStatus = {
                             text: `✓ All Loops Done • Starting ${delaySec}s Power Countdown...`,
                             progress: 1,
@@ -283,6 +287,14 @@ app.registerExtension({
         if (!TARGET_CLASSES.has(nodeData.name)) return;
 
         if (ITERATOR_CLASSES.has(nodeData.name)) {
+            const LEGACY_ACTION_MAP = {
+                "Close ComfyUI & Shut Down PC": "Shut Down PC",
+                "Close ComfyUI & Sleep PC": "Sleep PC",
+                "Close ComfyUI & Hibernate PC": "Hibernate PC",
+                "Close ComfyUI Only (Keep PC On)": "Close ComfyUI",
+                "Do Nothing (Disabled)": "Do Nothing",
+            };
+
             const origOnNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function () {
                 const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
@@ -300,13 +312,24 @@ app.registerExtension({
                     btn.serialize = false;
                 }
 
-                const minW = nodeData.name === SHUTDOWN_ITERATOR_CLASS ? 350 : 320;
-                if (!this.size || this.size[0] < minW) {
-                    const sz = this.computeSize ? this.computeSize() : [minW, 280];
-                    this.size = [Math.max(minW, sz[0]), sz[1]];
+                if (this.computeSize) {
+                    const sz = this.computeSize();
+                    this.size = [sz[0], sz[1]];
                 }
                 return res;
             };
+
+            if (nodeData.name === SHUTDOWN_ITERATOR_CLASS) {
+                const origOnConfigure = nodeType.prototype.onConfigure;
+                nodeType.prototype.onConfigure = function (info) {
+                    const res = origOnConfigure ? origOnConfigure.apply(this, arguments) : undefined;
+                    const w = this.widgets?.find((w) => w.name === "after_run");
+                    if (w && LEGACY_ACTION_MAP[w.value]) {
+                        w.value = LEGACY_ACTION_MAP[w.value];
+                    }
+                    return res;
+                };
+            }
 
             const origGetExtraMenuOptions = nodeType.prototype.getExtraMenuOptions;
             nodeType.prototype.getExtraMenuOptions = function (_, options) {
@@ -315,13 +338,13 @@ app.registerExtension({
                 }
                 const extraItems = [
                     {
-                        content: "⚡ Reset Iterator to Start (reset_to & Loop 1)",
+                        content: "↺ Reset Counter",
                         callback: () => resetIteratorNode(this),
                     },
                 ];
                 if (nodeData.name === SHUTDOWN_ITERATOR_CLASS) {
                     extraItems.unshift({
-                        content: "✖ Abort Scheduled Shutdown / Power Action",
+                        content: "✖ Abort Scheduled Shutdown",
                         callback: () => cancelPendingShutdown(this),
                     });
                 }
