@@ -71,7 +71,7 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - **Direct `INT` or `STRING` `prompt_index` Input**: Wire your `WFA Loop Iterator` `index` straight in without needing an `INT to String` node.
   - **Dedicated Prompt Inputs**: Optional sockets for `raw_prompt`, `raw_negative`, `refined_prompt`, `final_prompt`, and `final_negative` (cleanly skips any unconnected/empty inputs, with optional `[SECTION]` `headers` toggle and `overwrite` / `append` / `auto_number` modes).
 
-### 7. `WFA Batch Prompt Loader ⚡` & `WFA Prompt Label Filter ⚡ (WFA Suite)`
+### 7. `WFA Batch Prompt Loader ⚡`, `WFA Batch Prompt Switcher ⚡` & `WFA Prompt Label Filter ⚡ (WFA Suite)`
 - **Category**: `WFA Node Suite/Prompts`
 - **Features**:
   - **`WFA Batch Prompt Loader ⚡`**: Single-node, zero-warning replacement for Inspire Pack's `Load Prompts From File` + `Unzip Prompt` + 9+ embedded regex extractor nodes:
@@ -79,6 +79,11 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
     - **Clean `key: value` Sections + 5-Character Future-Proofing**: Directly parses `width:`, `height:` (or `hight:`), `size:` (`896x1152`), `batchsize:`, `sdxl_lora:`, `sdxl_strength:`, `anima_lora:`, `anima_strength:`, and up to **5 character toggles** (`c1:`–`c5:` or `chars: C1, C2`) right out of each prompt block.
     - **100% Backwards-Compatible Legacy Parsing**: Automatically extracts existing `/*{{{width}}}[[[height]]][[{batch}]][{{sdxl_idx}}]{[{sdxl_str}]}[}{anima_idx}{]{[}anima_str{]}[{[c1]}]{[[c2]]}*/` negative metadata blocks and strips only that control block while preserving `/*AVOID, */` and all other Find & Replace placeholders.
     - **Standalone or Filter-Controlled**: Works completely standalone (`prompt_file` + `index`) OR controlled via the `label_filter` wire from **`WFA Prompt Label Filter ⚡`**. Automatically discovers `.txt` files from both `ComfyUI-WA-Suite/prompts/` and `ComfyUI-Inspire-Pack/prompts/` with sub-millisecond RAM mtime caching.
+  - **`WFA Batch Prompt Switcher ⚡`**: Upgraded copy of `WFA Batch Prompt Loader ⚡` that consolidates **12–15 external Switch nodes** directly into the loader with **zero inactive-branch latency**:
+    - **1-to-1 Mirrored Single-UI Input Sockets**: Mirrors `positive`, `negative`, `title`, `width`, `height`, `batch_size`, `sdxl_lora`, `sdxl_strength`, `anima_lora`, `anima_strength`, and `c1_enable`–`c5_enable` directly across from their matching output sockets.
+    - **True Lazy Evaluation (`check_lazy_status`)**: When `use_batch` is `Batch File`, your Single UI upstream branches are completely skipped; when `use_batch` is `Single UI`, the batch filter upstream branch is skipped.
+    - **Independent `file_batch` Switch**: Separate boolean switch (`Batch File` vs `UI Input`) lets you override `batch_size` from your UI even while running prompts & settings from the batch `.txt` file.
+    - **Automatic Prefix Stripping**: Automatically strips leading `"positive:"` from the `positive` input and leading `"negative:"` from the `negative` input so pasted prompts work cleanly without extra regex nodes.
   - **`WFA Prompt Label Filter ⚡`**: Clean dark-themed cockpit UI node designed to sit directly inside your ComfyUI dashboard:
     - **Auto-Detects Extendable `[LABEL]` Tags**: Scans all prompt titles in the selected `.txt` file for bracket labels (e.g. `[CORE]`, `[MODERN]`, `[MEDIEVAL]`, `[GS]`, `[PREG]`, `[TAIL]`, `[F1]`–`[F3]`, `[M1]`–`[M2]`, or any new `[CUSTOM]` tag you invent on demand) and renders interactive checkboxes with per-label prompt counts.
     - **Live Prompt Counter & Quick Controls**: Shows real-time **`● Active: X / Y`** count before you even queue, with **`All`**, **`None`**, **`Inv`**, **`↻`** (disk rescan), and `Ctrl+Click` to solo any label.

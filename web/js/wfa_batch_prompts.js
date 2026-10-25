@@ -3,6 +3,8 @@ import { api } from "../../../scripts/api.js";
 
 const FILTER_CLASS = "WFA_PromptLabelFilter";
 const LOADER_CLASS = "WFA_BatchPromptLoader";
+const SWITCH_LOADER_CLASS = "WFA_BatchPromptSwitchLoader";
+const LOADER_CLASSES = new Set([LOADER_CLASS, SWITCH_LOADER_CLASS]);
 const UNTAGGED_LABEL = "UNTAGGED";
 const STYLE_ID = "wfa-batch-prompts-styles";
 
@@ -664,6 +666,7 @@ app.registerExtension({
                 node._wfaBatchPromptStatus = {
                     text: detail.text || "",
                     warning: Boolean(detail.warning),
+                    singleMode: Boolean(detail.single_mode),
                 };
                 node.setDirtyCanvas?.(true, true);
             }
@@ -730,7 +733,7 @@ app.registerExtension({
             };
         }
 
-        if (nodeData.name === LOADER_CLASS) {
+        if (LOADER_CLASSES.has(nodeData.name)) {
             const origOnDrawForeground = nodeType.prototype.onDrawForeground;
             nodeType.prototype.onDrawForeground = function (ctx, graphCanvas, canvasEl, lowQuality) {
                 if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
@@ -744,13 +747,29 @@ app.registerExtension({
                 const pillH = 20;
                 const pillY = -titleH - pillH - 4;
 
+                const strokeColor = status.warning
+                    ? "#ef4444"
+                    : status.singleMode
+                      ? "#38bdf8"
+                      : "#4ade80";
+                const fillTint = status.warning
+                    ? "rgba(239, 68, 68, 0.25)"
+                    : status.singleMode
+                      ? "rgba(56, 189, 248, 0.20)"
+                      : "rgba(74, 222, 128, 0.18)";
+                const textColor = status.warning
+                    ? "#fca5a5"
+                    : status.singleMode
+                      ? "#7dd3fc"
+                      : "#4ade80";
+
                 ctx.save();
                 ctx.font = 'bold 11px "JetBrains Mono", "Consolas", sans-serif';
                 const textW = ctx.measureText(status.text).width;
                 const pillW = Math.max(150, textW + 18);
 
                 ctx.fillStyle = "#18181b";
-                ctx.strokeStyle = status.warning ? "#ef4444" : "#4ade80";
+                ctx.strokeStyle = strokeColor;
                 ctx.lineWidth = status.warning ? 1.5 : 1;
                 ctx.beginPath();
                 ctx.roundRect(0, pillY, pillW, pillH, 5);
@@ -761,13 +780,11 @@ app.registerExtension({
                 ctx.beginPath();
                 ctx.roundRect(0, pillY, pillW, pillH, 5);
                 ctx.clip();
-                ctx.fillStyle = status.warning
-                    ? "rgba(239, 68, 68, 0.25)"
-                    : "rgba(74, 222, 128, 0.18)";
+                ctx.fillStyle = fillTint;
                 ctx.fillRect(0, pillY, pillW, pillH);
                 ctx.restore();
 
-                ctx.fillStyle = status.warning ? "#fca5a5" : "#4ade80";
+                ctx.fillStyle = textColor;
                 ctx.textBaseline = "middle";
                 ctx.fillText(status.text, 8, pillY + pillH / 2);
                 ctx.restore();

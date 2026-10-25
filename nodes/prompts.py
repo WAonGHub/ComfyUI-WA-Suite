@@ -26,6 +26,8 @@ _SUITE_PROMPTS_DIR = os.path.join(_SUITE_ROOT, "prompts")
 
 _DIVIDER_SPLIT_RE = re.compile(r"(?:^|\n)[ \t]*-{3,}[ \t]*(?:\r?\n|$)")
 _LABEL_BRACKET_RE = re.compile(r"\[\s*([A-Za-z0-9_+-]+)\s*\]")
+_LEADING_POSITIVE_PREFIX_RE = re.compile(r"^\s*positive\s*:\s*", re.IGNORECASE)
+_LEADING_NEGATIVE_PREFIX_RE = re.compile(r"^\s*negative\s*:\s*", re.IGNORECASE)
 
 # Legacy embedded negative metadata extractors:
 # /*{{{896}}}[[[1152]]][[{2}]][{{2}}]{[{0.5}]}[}{1}{]{[}0.5{]}[{[false]}]{[[true]]}*/
@@ -71,6 +73,18 @@ _INLINE_META_PAIR_RE = re.compile(
 )
 
 _PARSED_FILE_CACHE: dict[tuple[str, float], dict] = {}
+
+
+def _strip_positive_prefix(text: str | None) -> str:
+    if not text:
+        return ""
+    return _LEADING_POSITIVE_PREFIX_RE.sub("", str(text), count=1).strip()
+
+
+def _strip_negative_prefix(text: str | None) -> str:
+    if not text:
+        return ""
+    return _LEADING_NEGATIVE_PREFIX_RE.sub("", str(text), count=1).strip()
 
 
 def _parse_bool(val: str, default: bool = False) -> bool:
@@ -252,8 +266,8 @@ def _parse_single_prompt_block(block: str, pending_title: str) -> dict | None:
     if "positive" not in sections:
         return None
 
-    positive_raw = "\n".join(sections.get("positive", [])).strip()
-    negative_raw = "\n".join(sections.get("negative", [])).strip()
+    positive_raw = _strip_positive_prefix("\n".join(sections.get("positive", [])))
+    negative_raw = _strip_negative_prefix("\n".join(sections.get("negative", [])))
 
     # Determine raw title (explicit `title:`/`name:` -> inline leading line -> preceding divider title block)
     explicit_title = "\n".join(sections.get("title") or sections.get("name") or []).strip()
@@ -895,12 +909,534 @@ class WFA_BatchPromptLoader:
         )
 
 
+class WFA_BatchPromptSwitchLoader:
+    """
+    WFA Batch Prompt Switcher: Copy of `WFA Batch Prompt Loader` upgraded with mirrored Single-UI inputs,
+    true lazy evaluation (`check_lazy_status`), a master `use_batch` switch (`Batch File` vs `Single UI`),
+    and an independent `file_batch` switch (`Batch File` vs `UI Input` for `batch_size`) — replacing a dozen+
+    external Switch nodes with zero inactive-branch latency. Automatically strips leading `positive:` and
+    `negative:` prefixes from inputs.
+    """
+
+    _SINGLE_UI_LAZY_KEYS = (
+        "positive",
+        "negative",
+        "title",
+        "width",
+        "height",
+        "sdxl_lora",
+        "sdxl_strength",
+        "anima_lora",
+        "anima_strength",
+        "c1_enable",
+        "c2_enable",
+        "c3_enable",
+        "c4_enable",
+        "c5_enable",
+    )
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        files = list_prompt_files()
+        default_file = "MAIN.txt" if "MAIN.txt" in files else files[0]
+        return {
+            "required": {
+                "use_batch": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Batch File",
+                        "label_off": "Single UI",
+                        "tooltip": (
+                            "Master source switch (can also be wired to your dashboard boolean toggle):\n"
+                            "• Batch File (true): Outputs prompts & settings from the batch `.txt` file / `label_filter` (skips Single UI inputs lazily).\n"
+                            "• Single UI (false): Outputs prompts & settings from the mirrored Single UI input sockets on the left."
+                        ),
+                    },
+                ),
+                "file_batch": (
+                    "BOOLEAN",
+                    {
+                        "default": False,
+                        "label_on": "Batch File",
+                        "label_off": "UI Input",
+                        "tooltip": (
+                            "Independent `batch_size` source switch:\n"
+                            "• Batch File (true): Takes `batch_size` from `batchsize:` / `[[{N}]]` inside the batch prompt file.\n"
+                            "• UI Input (false): Takes `batch_size` from the `batch_size` input socket on the left (even when `use_batch` is Batch File)."
+                        ),
+                    },
+                ),
+                "prompt_file": (
+                    files,
+                    {
+                        "default": default_file,
+                        "tooltip": "Prompt `.txt` file to load when `label_filter` is not connected.",
+                    },
+                ),
+                "index": (
+                    "INT",
+                    {
+                        "default": 0,
+                        "min": 0,
+                        "max": 999999,
+                        "step": 1,
+                        "tooltip": "0-based prompt index to output in Batch File mode (wire from `WFA Loop Iterator` / `WFA Loop Shutdown` `index`).",
+                    },
+                ),
+                "reload": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Auto",
+                        "label_off": "Cached",
+                        "tooltip": "When Auto, automatically reloads from disk whenever the `.txt` file is edited and saved; otherwise reads from fast RAM cache.",
+                    },
+                ),
+                "clean_title": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Clean",
+                        "label_off": "Raw",
+                        "tooltip": "When Clean, removes `[LABEL]` tags from the `title` output string.",
+                    },
+                ),
+                "strip_meta": (
+                    "BOOLEAN",
+                    {
+                        "default": True,
+                        "label_on": "Clean",
+                        "label_off": "Raw",
+                        "tooltip": "When Clean, strips legacy `/*{{{width}}}[[[height]]]...*/` control blocks from `negative` while keeping all other `/*...*/` placeholders intact.",
+                    },
+                ),
+                "default_width": (
+                    "INT",
+                    {
+                        "default": 1024,
+                        "min": 64,
+                        "max": 8192,
+                        "step": 8,
+                        "tooltip": "Fallback width when active source does not specify a width.",
+                    },
+                ),
+                "default_height": (
+                    "INT",
+                    {
+                        "default": 1024,
+                        "min": 64,
+                        "max": 8192,
+                        "step": 8,
+                        "tooltip": "Fallback height when active source does not specify a height.",
+                    },
+                ),
+            },
+            "optional": {
+                "positive": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI positive prompt input (automatically strips any leading `positive:` prefix).",
+                    },
+                ),
+                "negative": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI negative prompt input (automatically strips any leading `negative:` prefix).",
+                    },
+                ),
+                "title": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Optional Single UI title input.",
+                    },
+                ),
+                "width": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI width input.",
+                    },
+                ),
+                "height": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI height input.",
+                    },
+                ),
+                "batch_size": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "UI `batch_size` input (used whenever `file_batch` is set to `UI Input`).",
+                    },
+                ),
+                "sdxl_lora": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI SDXL LoRA index input.",
+                    },
+                ),
+                "sdxl_strength": (
+                    "FLOAT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI SDXL LoRA strength input.",
+                    },
+                ),
+                "anima_lora": (
+                    "INT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Anima LoRA index input.",
+                    },
+                ),
+                "anima_strength": (
+                    "FLOAT",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Anima LoRA strength input.",
+                    },
+                ),
+                "c1_enable": (
+                    "BOOLEAN",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Character 1 enable boolean input.",
+                    },
+                ),
+                "c2_enable": (
+                    "BOOLEAN",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Character 2 enable boolean input.",
+                    },
+                ),
+                "c3_enable": (
+                    "BOOLEAN",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Character 3 enable boolean input.",
+                    },
+                ),
+                "c4_enable": (
+                    "BOOLEAN",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Character 4 enable boolean input.",
+                    },
+                ),
+                "c5_enable": (
+                    "BOOLEAN",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Single UI Character 5 enable boolean input.",
+                    },
+                ),
+                "label_filter": (
+                    "WFA_PROMPT_FILTER",
+                    {
+                        "lazy": True,
+                        "tooltip": "Optional control wire from `WFA Prompt Label Filter`. Overrides `prompt_file` and passes only prompts matching your checked UI labels.",
+                    },
+                ),
+                "text_override": (
+                    "STRING",
+                    {
+                        "forceInput": True,
+                        "lazy": True,
+                        "tooltip": "Optional raw prompt list text wire (used in Batch File mode when `label_filter` is not connected).",
+                    },
+                ),
+            },
+            "hidden": {
+                "unique_id": "UNIQUE_ID",
+            },
+        }
+
+    RETURN_TYPES = WFA_BatchPromptLoader.RETURN_TYPES
+    RETURN_NAMES = WFA_BatchPromptLoader.RETURN_NAMES
+    FUNCTION = "load_or_switch"
+    CATEGORY = f"{SUITE_CATEGORY}/Prompts"
+
+    @classmethod
+    def VALIDATE_INPUTS(cls, **kwargs):
+        return True
+
+    @classmethod
+    def IS_CHANGED(cls, prompt_file="", reload=True, **kwargs):
+        if reload is not False and prompt_file:
+            fpath = resolve_prompt_file_path(str(prompt_file))
+            mtime = os.path.getmtime(fpath) if fpath and os.path.isfile(fpath) else 0.0
+            return f"{prompt_file}:{mtime}"
+        return f"{prompt_file}"
+
+    def check_lazy_status(
+        self,
+        use_batch: bool = True,
+        file_batch: bool = False,
+        **kwargs,
+    ):
+        needed: list[str] = []
+
+        if bool(use_batch) or bool(file_batch):
+            for k in ("label_filter", "text_override"):
+                if k in kwargs and kwargs[k] is None:
+                    needed.append(k)
+
+        if not bool(use_batch):
+            for k in self._SINGLE_UI_LAZY_KEYS:
+                if k in kwargs and kwargs[k] is None:
+                    needed.append(k)
+
+        if not bool(file_batch):
+            if "batch_size" in kwargs and kwargs["batch_size"] is None:
+                needed.append("batch_size")
+
+        return needed
+
+    def _resolve_batch_entries(
+        self,
+        prompt_file: str,
+        label_filter=None,
+        text_override: str | None = None,
+    ) -> list[dict]:
+        if isinstance(label_filter, dict) and "entries" in label_filter:
+            return label_filter["entries"]
+        if text_override is not None and str(text_override).strip():
+            return parse_prompt_text(str(text_override))["entries"]
+        return load_parsed_prompt_file(prompt_file, use_mtime_cache=True)["entries"]
+
+    def load_or_switch(
+        self,
+        use_batch: bool = True,
+        file_batch: bool = False,
+        prompt_file: str = "",
+        index: int = 0,
+        reload: bool = True,
+        clean_title: bool = True,
+        strip_meta: bool = True,
+        default_width: int = 1024,
+        default_height: int = 1024,
+        positive: str | None = None,
+        negative: str | None = None,
+        title: str | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        batch_size: int | None = None,
+        sdxl_lora: int | None = None,
+        sdxl_strength: float | None = None,
+        anima_lora: int | None = None,
+        anima_strength: float | None = None,
+        c1_enable: bool | None = None,
+        c2_enable: bool | None = None,
+        c3_enable: bool | None = None,
+        c4_enable: bool | None = None,
+        c5_enable: bool | None = None,
+        label_filter=None,
+        text_override: str | None = None,
+        unique_id=None,
+    ):
+        entries: list[dict] = []
+        active_entry: dict | None = None
+
+        if bool(use_batch) or bool(file_batch):
+            entries = self._resolve_batch_entries(prompt_file, label_filter, text_override)
+            if entries:
+                clamped_for_meta = max(0, min(int(index), len(entries) - 1))
+                active_entry = entries[clamped_for_meta]
+
+        # Resolve `batch_size` independently via `file_batch` switch
+        if bool(file_batch):
+            if active_entry is not None:
+                b_out = max(1, int(active_entry["meta"].get("batch_size", 1)))
+            else:
+                b_out = max(1, int(batch_size)) if batch_size is not None else 1
+        else:
+            b_out = max(1, int(batch_size)) if batch_size is not None else 1
+
+        # Branch A: Single UI Mode (`use_batch == False`)
+        if not bool(use_batch):
+            pos_out = _strip_positive_prefix(positive)
+            neg_clean = _strip_negative_prefix(negative)
+            if strip_meta and neg_clean:
+                neg_out = _LEGACY_META_COMMENT_RE.sub("", neg_clean).strip()
+            else:
+                neg_out = neg_clean
+
+            raw_single_title = str(title).strip() if title is not None else ""
+            if clean_title and raw_single_title:
+                t_stripped = _LABEL_BRACKET_RE.sub("", raw_single_title)
+                title_out = re.sub(r"\s{2,}", " ", t_stripped).strip(" -–—\t") or raw_single_title
+            else:
+                title_out = raw_single_title
+
+            w_out = int(width) if width is not None else int(default_width)
+            h_out = int(height) if height is not None else int(default_height)
+            sdxl_idx = int(sdxl_lora) if sdxl_lora is not None else 0
+            sdxl_str = float(sdxl_strength) if sdxl_strength is not None else 1.0
+            anima_idx = int(anima_lora) if anima_lora is not None else 0
+            anima_str = float(anima_strength) if anima_strength is not None else 1.0
+            c1 = bool(c1_enable) if c1_enable is not None else False
+            c2 = bool(c2_enable) if c2_enable is not None else False
+            c3 = bool(c3_enable) if c3_enable is not None else False
+            c4 = bool(c4_enable) if c4_enable is not None else False
+            c5 = bool(c5_enable) if c5_enable is not None else False
+
+            if PromptServer is not None and getattr(PromptServer, "instance", None) is not None and unique_id is not None:
+                uid = unique_id[0] if isinstance(unique_id, list) else unique_id
+                PromptServer.instance.send_sync(
+                    "wfa-batch-prompt-feedback",
+                    {
+                        "node_id": str(uid),
+                        "text": f"Single UI • {w_out}×{h_out} • Batch {b_out}",
+                        "warning": False,
+                        "single_mode": True,
+                    },
+                )
+
+            return (
+                pos_out,
+                neg_out,
+                title_out,
+                w_out,
+                h_out,
+                b_out,
+                sdxl_idx,
+                sdxl_str,
+                anima_idx,
+                anima_str,
+                c1,
+                c2,
+                c3,
+                c4,
+                c5,
+                0,
+                1,
+            )
+
+        # Branch B: Batch File Mode (`use_batch == True`)
+        count = len(entries)
+        end_index = max(0, count - 1)
+
+        if count == 0 or active_entry is None:
+            if PromptServer is not None and getattr(PromptServer, "instance", None) is not None and unique_id is not None:
+                uid = unique_id[0] if isinstance(unique_id, list) else unique_id
+                PromptServer.instance.send_sync(
+                    "wfa-batch-prompt-feedback",
+                    {
+                        "node_id": str(uid),
+                        "text": "⚠ 0 prompts matched active filter",
+                        "warning": True,
+                        "single_mode": False,
+                    },
+                )
+            return (
+                "",
+                "",
+                "",
+                int(default_width),
+                int(default_height),
+                b_out,
+                0,
+                1.0,
+                0,
+                1.0,
+                False,
+                False,
+                False,
+                False,
+                False,
+                0,
+                0,
+            )
+
+        clamped_idx = max(0, min(int(index), count - 1))
+        meta = active_entry["meta"]
+
+        pos_out = active_entry["positive"]
+        neg_out = active_entry["negative_stripped"] if strip_meta else active_entry["negative_raw"]
+        title_out = active_entry["clean_title"] if clean_title else active_entry["raw_title"]
+
+        w_out = int(meta.get("width", default_width))
+        h_out = int(meta.get("height", default_height))
+        sdxl_idx = int(meta.get("sdxl_lora", 0))
+        sdxl_str = float(meta.get("sdxl_strength", 1.0))
+        anima_idx = int(meta.get("anima_lora", 0))
+        anima_str = float(meta.get("anima_strength", 1.0))
+        c1 = bool(meta.get("c1", False))
+        c2 = bool(meta.get("c2", False))
+        c3 = bool(meta.get("c3", False))
+        c4 = bool(meta.get("c4", False))
+        c5 = bool(meta.get("c5", False))
+
+        if PromptServer is not None and getattr(PromptServer, "instance", None) is not None and unique_id is not None:
+            uid = unique_id[0] if isinstance(unique_id, list) else unique_id
+            short_title = title_out if len(title_out) <= 30 else (title_out[:27] + "...")
+            badge_txt = (
+                f"[{clamped_idx}/{end_index}] {short_title} • {w_out}×{h_out} • B:{b_out}"
+                if short_title
+                else f"[{clamped_idx}/{end_index}] • {w_out}×{h_out} • B:{b_out}"
+            )
+            PromptServer.instance.send_sync(
+                "wfa-batch-prompt-feedback",
+                {
+                    "node_id": str(uid),
+                    "text": badge_txt,
+                    "warning": False,
+                    "single_mode": False,
+                },
+            )
+
+        return (
+            pos_out,
+            neg_out,
+            title_out,
+            w_out,
+            h_out,
+            b_out,
+            sdxl_idx,
+            sdxl_str,
+            anima_idx,
+            anima_str,
+            c1,
+            c2,
+            c3,
+            c4,
+            c5,
+            end_index,
+            count,
+        )
+
+
 NODE_CLASS_MAPPINGS = {
     "WFA_BatchPromptLoader": WFA_BatchPromptLoader,
+    "WFA_BatchPromptSwitchLoader": WFA_BatchPromptSwitchLoader,
     "WFA_PromptLabelFilter": WFA_PromptLabelFilter,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "WFA_BatchPromptLoader": "WFA Batch Prompt Loader ⚡ (WFA Suite)",
+    "WFA_BatchPromptSwitchLoader": "WFA Batch Prompt Switcher ⚡ (WFA Suite)",
     "WFA_PromptLabelFilter": "WFA Prompt Label Filter ⚡ (WFA Suite)",
 }
