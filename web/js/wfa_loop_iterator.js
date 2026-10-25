@@ -4,8 +4,9 @@ import { api } from "../../../scripts/api.js";
 const ITERATOR_CLASS = "WFA_LoopIterator";
 const SHUTDOWN_ITERATOR_CLASS = "WFA_LoopIteratorShutdown";
 const COUNTER_CLASS = "WFA_PromptCounter";
+const SAVE_TXT_CLASS = "WFA_SavePromptTxt";
 const ITERATOR_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS]);
-const TARGET_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS, COUNTER_CLASS]);
+const TARGET_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS, COUNTER_CLASS, SAVE_TXT_CLASS]);
 
 const pendingSteps = new Map();
 let runWasAborted = false;
@@ -126,6 +127,20 @@ app.registerExtension({
             if (node) {
                 node._wfaIteratorStatus = {
                     text: `${detail.count} Prompts • end_index: ${detail.end_index}`,
+                    progress: 1,
+                    done: true,
+                    warning: false,
+                };
+                node.setDirtyCanvas?.(true, true);
+            }
+        });
+
+        api.addEventListener("wfa-save-txt-feedback", ({ detail }) => {
+            if (!detail || detail.node_id == null) return;
+            const node = getNodeById(String(detail.node_id));
+            if (node) {
+                node._wfaIteratorStatus = {
+                    text: `✓ Saved: ${detail.display_path}`,
                     progress: 1,
                     done: true,
                     warning: false,

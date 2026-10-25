@@ -61,6 +61,15 @@ Search **`wfa`** in ComfyUI to quickly bring up all nodes in this suite without 
   - **`WFA Loop Shutdown ⚡`**: Compact overnight power-saving copy of `WFA Loop Iterator`. Waits until the **very last image finishes generating and saving to disk**, runs a configurable safety countdown (`delay_sec`, default `60s`) with a live **`✖ ABORT SHUTDOWN`** button on the node, and then cleanly unloads GPU VRAM, closes ComfyUI, and executes your chosen `after_run` power action (`Shut Down PC`, `Sleep PC`, `Hibernate PC`, `Close ComfyUI`, or `Do Nothing`).
   - **`WFA Prompt Counter ⚡`**: Reads the total prompt count (`count`) and 0-based `end_index` (`count - 1`) from Inspire Pack Batch Prompts (`ZIPPED_PROMPT` outputs, `---` formatted prompt strings, or `.txt` files in `inspire_prompts`), multiline prompt lists, or any ComfyUI `LIST`. Connect its **`end_index`** output directly into **`WFA Loop Iterator`**'s `end_index`!
 
+### 6. `WFA Save Prompt .txt ⚡ (WFA Suite)`
+- **Category**: `WFA Node Suite/IO`
+- **Features**:
+  - Replaces 8+ string concat, `LoRA Stack -> String`, filename builder, and `Save Text` nodes with **one compact all-in-one node**.
+  - **Automatic Path & Filename Builder**: Saves directly to `<ComfyUI output>/<subfolder>/<character><separator><prompt_index>.txt` (creates missing subfolders automatically and sanitizes illegal Windows filename characters like `:`).
+  - **Built-In `LORA_STACK` Converter**: Wire your `lora_stack` directly into `lora_stack` (no external converter node needed!) — formats `<lora:name:model_wt:clip_wt>` automatically and skips `"None"` slots.
+  - **Direct `INT` or `STRING` `prompt_index` Input**: Wire your `WFA Loop Iterator` `index` straight in without needing an `INT to String` node.
+  - **Dedicated Prompt Inputs**: Optional sockets for `raw_prompt`, `raw_negative`, `refined_prompt`, `final_prompt`, and `final_negative` (cleanly skips any unconnected/empty inputs, with optional `[SECTION]` `headers` toggle and `overwrite` / `append` / `auto_number` modes).
+
 ## Installation
 
 ### Via ComfyUI-Manager
