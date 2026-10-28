@@ -110,6 +110,16 @@ positive: 1girl, solo, standing, city street, soft sunlight
 negative: /*AVOID, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry
 ```
 
+### 8. `WFA Model Upscale & Scale ⚡ (WFA Suite)`
+- **Category**: `WFA Node Suite/Upscaling`
+- **Features**:
+  - Combines **`Load Upscale Model`** + **`Upscale using Model`** + **`Upscale Image By`** into **one compact, fast node**.
+  - **Supersampled Downscaling / Sharpening**: Defaults to `scale_by: 0.50` + `bicubic` so `4x` upscale models cleanly produce crisp `2x` supersampled images without bloated 4K dimensions.
+  - **RAM Model Caching & OOM-Safe Tiling**: Caches the loaded `.pth`/`.safetensors` upscale model across batch loop iterations (zero repeated disk loads) and runs tiled GPU execution with automatic OOM fallback and VRAM offloading.
+  - **Fused NCHW Post-Resize**: Rescales directly on the model's `(B, C, H, W)` tensor before permuting back to ComfyUI `BHWC`, eliminating two full-size 4K tensor transposes.
+  - **1-Click / Wireable `enabled` Bypass Switch**: Set `enabled` to `Bypass` (or wire a dashboard boolean toggle) to pass `image` straight through in `0ms` without needing an external Switch/Bypass node.
+  - **Outputs**: `image` (`IMAGE`), `width` (`INT`), `height` (`INT`), plus a live resolution status pill above the node (`896×1152 → 1792×2304 (4x × 0.50)`).
+
 ## Installation
 
 ### Via ComfyUI-Manager

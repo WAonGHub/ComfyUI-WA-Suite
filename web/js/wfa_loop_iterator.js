@@ -5,8 +5,15 @@ const ITERATOR_CLASS = "WFA_LoopIterator";
 const SHUTDOWN_ITERATOR_CLASS = "WFA_LoopIteratorShutdown";
 const COUNTER_CLASS = "WFA_PromptCounter";
 const SAVE_TXT_CLASS = "WFA_SavePromptTxt";
+const UPSCALE_CLASS = "WFA_ModelUpscaleResize";
 const ITERATOR_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS]);
-const TARGET_CLASSES = new Set([ITERATOR_CLASS, SHUTDOWN_ITERATOR_CLASS, COUNTER_CLASS, SAVE_TXT_CLASS]);
+const TARGET_CLASSES = new Set([
+    ITERATOR_CLASS,
+    SHUTDOWN_ITERATOR_CLASS,
+    COUNTER_CLASS,
+    SAVE_TXT_CLASS,
+    UPSCALE_CLASS,
+]);
 
 const pendingSteps = new Map();
 let runWasAborted = false;
@@ -143,6 +150,20 @@ app.registerExtension({
                     text: `✓ Saved: ${detail.display_path}`,
                     progress: 1,
                     done: true,
+                    warning: false,
+                };
+                node.setDirtyCanvas?.(true, true);
+            }
+        });
+
+        api.addEventListener("wfa-upscale-feedback", ({ detail }) => {
+            if (!detail || detail.node_id == null) return;
+            const node = getNodeById(String(detail.node_id));
+            if (node) {
+                node._wfaIteratorStatus = {
+                    text: detail.text || "",
+                    progress: detail.done ? 1 : 0,
+                    done: Boolean(detail.done),
                     warning: false,
                 };
                 node.setDirtyCanvas?.(true, true);
