@@ -4,8 +4,11 @@ import { api } from "../../../scripts/api.js";
 const CHAR_COCKPIT_CLASS = "WFA_CharacterLoraCockpit";
 const GEN_DECK_CLASS = "WFA_GenerationDeck";
 const INSPECTOR_CLASS = "WFA_PromptInspector";
+const PIPE_IN_CLASS = "WFA_CockpitPipeIn";
+const PIPE_OUT_CLASS = "WFA_CockpitPipeOut";
 const ALL_COCKPIT_CLASSES = new Set([CHAR_COCKPIT_CLASS, GEN_DECK_CLASS, INSPECTOR_CLASS]);
 
+const PIPE_COLOR = "#4ade80";
 const STYLE_ID = "wfa-cockpit-suite-styles";
 
 let sharedCockpitMeta = {
@@ -15,6 +18,17 @@ let sharedCockpitMeta = {
     schedulers: ["normal", "karras", "exponential", "sgm_uniform", "simple", "ddim_uniform", "beta"],
 };
 const metaListeners = new Set();
+
+function registerPipeColors() {
+    try {
+        if (window.LGraphCanvas?.link_type_colors) {
+            window.LGraphCanvas.link_type_colors.WFA_PIPE = PIPE_COLOR;
+        }
+        if (app.canvas?.default_connection_color_byType) {
+            app.canvas.default_connection_color_byType.WFA_PIPE = PIPE_COLOR;
+        }
+    } catch (_) {}
+}
 
 async function fetchCockpitMeta(force = false) {
     if (sharedCockpitMeta.loaded && !force) return sharedCockpitMeta;
@@ -60,13 +74,9 @@ function highlightPromptHtml(raw) {
         return `<span class="wfa-ck-muted">Run a generation to inspect the compiled prompt & token breakdown...</span>`;
     }
     let html = escapeHtml(raw);
-    // 1. Highlight unreplaced /*PLACEHOLDER*/ comments in bright amber
     html = html.replace(/\/\*[\s\S]*?\*\//g, (m) => `<span class="wfa-hl-warn" title="Unreplaced comment/placeholder">${m}</span>`);
-    // 2. Highlight <lora:name:wt> tags in emerald green
     html = html.replace(/&lt;lora:[^&]+?&gt;/gi, (m) => `<span class="wfa-hl-lora">${m}</span>`);
-    // 3. Highlight dynamic {a|b} or [a:b:0.5] blocks in violet
     html = html.replace(/\{[^{}\n]+\}/g, (m) => `<span class="wfa-hl-dyn">${m}</span>`);
-    // 4. Highlight weighted expressions (tag:1.2) in sky cyan
     html = html.replace(/\([^()\n]+:\s*-?\d+(?:\.\d+)?\)/g, (m) => `<span class="wfa-hl-wt">${m}</span>`);
     return html;
 }
@@ -81,6 +91,38 @@ function formatShortLoraLabel(loraName) {
         return `${folder} / ${file}`;
     }
     return file;
+}
+
+function loraStem(loraName) {
+    const norm = String(loraName || "").replace(/\\/g, "/");
+    const base = norm.split("/").pop() || "";
+    return base.replace(/\.[^.]+$/, "");
+}
+
+function formatLoraWt(val) {
+    const r = Math.round(Number(val) * 10000) / 10000;
+    if (Number.isInteger(r)) return r.toFixed(1);
+    return String(r);
+}
+
+function gcd(a, b) {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    while (y !== 0) {
+        const t = y;
+        y = x % y;
+        x = t;
+    }
+    return x || 1;
+}
+
+function formatAspectBadge(w, h) {
+    const d = gcd(w, h);
+    const rw = Math.round(w / d);
+    const rh = Math.round(h / d);
+    const ratioStr = rw <= 25 && rh <= 25 ? `${rw}:${rh}` : `${(w / Math.max(1, h)).toFixed(2)}:1`;
+    const mp = ((w * h) / 1000000).toFixed(2);
+    return `${ratioStr} • ${mp}MP`;
 }
 
 function ensureStyles() {
@@ -118,7 +160,7 @@ function ensureStyles() {
             flex-direction: row !important;
             align-items: center !important;
             justify-content: space-between !important;
-            gap: 6px !important;
+            gap: 5px !important;
             padding: 4px 7px !important;
             background: #121215 !important;
             border-bottom: 1px solid #2e2e36 !important;
@@ -178,11 +220,19 @@ function ensureStyles() {
             border-color: rgba(74, 222, 128, 0.55) !important;
         }
 
+        .wfa-ck-mini-btn.wfa-mode-blue {
+            background: rgba(56, 189, 248, 0.16) !important;
+            color: #7dd3fc !important;
+            border-color: rgba(56, 189, 248, 0.55) !important;
+        }
+
         .wfa-ck-body {
             flex: 1 1 auto !important;
             overflow-y: auto !important;
             overflow-x: hidden !important;
             box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: column !important;
         }
 
         /* --- Character LoRA Cockpit Rows --- */
@@ -194,6 +244,7 @@ function ensureStyles() {
             padding: 5px 6px !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
             box-sizing: border-box !important;
+            flex: 0 0 auto !important;
         }
 
         .wfa-char-row.wfa-even {
@@ -206,6 +257,19 @@ function ensureStyles() {
 
         .wfa-char-row.wfa-live-on {
             box-shadow: inset 3px 0 0 #4ade80 !important;
+        }
+
+        .wfa-char-footer {
+            flex: 1 1 auto !important;
+            min-height: 24px !important;
+            background: #121215 !important;
+            padding: 5px 7px !important;
+            font-size: 10.5px !important;
+            line-height: 15px !important;
+            color: #71717a !important;
+            overflow-y: auto !important;
+            word-break: break-word !important;
+            box-sizing: border-box !important;
         }
 
         .wfa-char-toggle {
@@ -403,6 +467,7 @@ function ensureStyles() {
             display: flex !important;
             flex-direction: column !important;
             gap: 5px !important;
+            flex: 0 0 auto !important;
         }
 
         .wfa-deck-sec:nth-child(even) {
@@ -473,14 +538,51 @@ function ensureStyles() {
             color: #7dd3fc !important;
         }
 
+        /* --- 2D Aspect Ratio & Resolution Pad --- */
+        .wfa-res-2d-wrap {
+            display: flex !important;
+            flex-direction: row !important;
+            align-items: stretch !important;
+            gap: 8px !important;
+            width: 100% !important;
+        }
+
+        .wfa-res-pad-canvas {
+            width: 114px !important;
+            height: 114px !important;
+            flex: 0 0 114px !important;
+            background: #111115 !important;
+            border: 1px solid #383842 !important;
+            border-radius: 5px !important;
+            cursor: crosshair !important;
+            touch-action: none !important;
+            box-sizing: border-box !important;
+            transition: border-color 0.1s ease !important;
+        }
+
+        .wfa-res-pad-canvas:hover,
+        .wfa-res-pad-canvas.wfa-dragging {
+            border-color: #4ade80 !important;
+        }
+
+        .wfa-res-right-col {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            height: 114px !important;
+            box-sizing: border-box !important;
+        }
+
         .wfa-res-chips {
             display: grid !important;
-            grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)) !important;
+            grid-template-columns: repeat(3, 1fr) !important;
             gap: 3px !important;
         }
 
         .wfa-res-chip {
-            height: 19px !important;
+            height: 21px !important;
             font-family: inherit !important;
             font-size: 9.5px !important;
             font-weight: 600 !important;
@@ -489,7 +591,10 @@ function ensureStyles() {
             border: 1px solid #32323b !important;
             border-radius: 3px !important;
             cursor: pointer !important;
-            padding: 0 3px !important;
+            padding: 0 2px !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
         }
 
         .wfa-res-chip:hover {
@@ -560,6 +665,7 @@ function ensureStyles() {
             padding: 3px 8px !important;
             font-size: 11px !important;
             border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+            flex: 0 0 auto !important;
         }
 
         .wfa-insp-row:nth-child(even) {
@@ -619,7 +725,7 @@ function attachOutsideBlur(containerEl) {
 }
 
 /* ============================================================================
- * 1. WFA CHARACTER LORA COCKPIT (5-Slot C1–C5 Manager)
+ * 1. WFA CHARACTER LORA COCKPIT (5-Slot C1–C5 Manager via WFA_PIPE)
  * ========================================================================== */
 function defaultCharSlots() {
     return [0, 1, 2, 3, 4].map((i) => ({
@@ -633,9 +739,13 @@ function defaultCharSlots() {
 
 function parseCharState(raw) {
     const slots = defaultCharSlots();
-    if (!raw) return { slots };
+    let mode = "auto";
+    if (!raw) return { mode, slots };
     try {
         const obj = JSON.parse(raw);
+        if (obj?.mode && ["auto", "batch", "ui"].includes(String(obj.mode).toLowerCase())) {
+            mode = String(obj.mode).toLowerCase();
+        }
         if (Array.isArray(obj?.slots)) {
             for (let i = 0; i < Math.min(5, obj.slots.length); i++) {
                 const s = obj.slots[i];
@@ -651,7 +761,7 @@ function parseCharState(raw) {
             }
         }
     } catch (_) {}
-    return { slots };
+    return { mode, slots };
 }
 
 function buildCharCockpitUI(node, masterTa) {
@@ -662,6 +772,11 @@ function buildCharCockpitUI(node, masterTa) {
     masterTa.dataset.wfaCkEnhanced = "true";
     ensureStyles();
     masterTa.classList.add("wfa-ck-hidden-ta");
+
+    const stateWidget = node.widgets?.find((x) => x.name === "cockpit_state");
+    if (stateWidget) {
+        stateWidget.computeSize = () => [240, 140];
+    }
 
     const card = document.createElement("div");
     card.className = "wfa-ck-card";
@@ -674,6 +789,10 @@ function buildCharCockpitUI(node, masterTa) {
 
     const topBtns = document.createElement("div");
     topBtns.className = "wfa-ck-row-btns";
+
+    const btnMode = document.createElement("button");
+    btnMode.type = "button";
+    btnMode.className = "wfa-ck-mini-btn wfa-active";
 
     const btnAllOff = document.createElement("button");
     btnAllOff.type = "button";
@@ -693,7 +812,7 @@ function buildCharCockpitUI(node, masterTa) {
     btnRefresh.textContent = "↻";
     btnRefresh.title = "Refresh LoRAs from disk";
 
-    topBtns.append(btnAllOff, btnClrOvr, btnRefresh);
+    topBtns.append(btnMode, btnAllOff, btnClrOvr, btnRefresh);
     header.append(badge, topBtns);
 
     const body = document.createElement("div");
@@ -713,10 +832,9 @@ function buildCharCockpitUI(node, masterTa) {
         isInternalSync = true;
         const json = JSON.stringify(state);
         masterTa.value = json;
-        const w = node.widgets?.find((x) => x.name === "cockpit_state");
-        if (w) {
-            w.value = json;
-            w.callback?.(json);
+        if (stateWidget) {
+            stateWidget.value = json;
+            stateWidget.callback?.(json);
         }
         isInternalSync = false;
         node.setDirtyCanvas?.(true, true);
@@ -768,6 +886,7 @@ function buildCharCockpitUI(node, masterTa) {
 
         function selectValue(val) {
             state.slots[slotIdx].lora_name = val;
+            lastLiveFeedback = null;
             persist();
             closePopover();
             renderRows();
@@ -835,30 +954,76 @@ function buildCharCockpitUI(node, masterTa) {
         setTimeout(() => searchIn.focus(), 10);
     }
 
-    function updateHeaderSummary() {
+    function computeLocalPreviewTags() {
+        if (lastLiveFeedback && typeof lastLiveFeedback.lora_tags === "string") {
+            return lastLiveFeedback.lora_tags;
+        }
+        const activeIdxs = state.slots
+            .map((s, idx) => (s.ui_enable ? idx : -1))
+            .filter((idx) => idx >= 0);
+        const multi = activeIdxs.length >= 2;
+        const tags = [];
+        for (const idx of activeIdxs) {
+            const s = state.slots[idx];
+            if (s.lora_name && s.lora_name !== "None") {
+                const wt = multi ? s.str_multi : s.str_solo;
+                if (Math.abs(wt) > 1e-6) {
+                    tags.push(`<lora:${loraStem(s.lora_name)}:${formatLoraWt(wt)}>`);
+                }
+            }
+        }
+        return tags.join(", ");
+    }
+
+    function updateHeaderAndFooter(footerEl) {
+        if (state.mode === "auto") {
+            btnMode.textContent = "⚡ Auto";
+            btnMode.className = "wfa-ck-mini-btn wfa-active";
+            btnMode.title = "Mode: Auto (follows Generation Deck 'Prompts: File / UI' switch in WFA_PIPE). Click to cycle Auto → Batch → UI.";
+        } else if (state.mode === "batch") {
+            btnMode.textContent = "⚡ Batch";
+            btnMode.className = "wfa-ck-mini-btn wfa-active";
+            btnMode.title = "Mode: Forced Batch Enable (uses c1..c5 batch wires unless Ovr is active). Click to cycle.";
+        } else {
+            btnMode.textContent = "✎ UI";
+            btnMode.className = "wfa-ck-mini-btn wfa-mode-blue";
+            btnMode.title = "Mode: Forced UI Enable (uses [✓ C1..C5] toggles on this card). Click to cycle.";
+        }
+
         if (lastLiveFeedback && lastLiveFeedback.summary) {
             badge.textContent = `● ${lastLiveFeedback.summary}`;
             badge.classList.toggle("wfa-muted", lastLiveFeedback.summary.startsWith("0"));
-            return;
-        }
-        const uiOn = state.slots
-            .map((s, idx) => (s.ui_enable ? idx : -1))
-            .filter((idx) => idx >= 0);
-        const multi = uiOn.length >= 2;
-        if (!uiOn.length) {
-            badge.textContent = "○ UI: 0 Active";
-            badge.classList.add("wfa-muted");
         } else {
-            badge.classList.remove("wfa-muted");
-            const desc = uiOn
-                .map((i) => {
-                    const st = multi ? state.slots[i].str_multi : state.slots[i].str_solo;
-                    return `C${i + 1}:${Number(st).toFixed(2)}`;
-                })
-                .join(", ");
-            badge.textContent = `● ${multi ? "Multi" : "Solo"} • ${desc}`;
+            const uiOn = state.slots
+                .map((s, idx) => (s.ui_enable ? idx : -1))
+                .filter((idx) => idx >= 0);
+            const multi = uiOn.length >= 2;
+            if (!uiOn.length) {
+                badge.textContent = "○ UI: 0 Active";
+                badge.classList.add("wfa-muted");
+            } else {
+                badge.classList.remove("wfa-muted");
+                const desc = uiOn
+                    .map((i) => {
+                        const st = multi ? state.slots[i].str_multi : state.slots[i].str_solo;
+                        return `C${i + 1}:${Number(st).toFixed(2)}`;
+                    })
+                    .join(", ");
+                badge.textContent = `● ${multi ? "Multi" : "Solo"} • ${desc}`;
+            }
+        }
+
+        if (footerEl) {
+            const previewTags = computeLocalPreviewTags();
+            if (previewTags) {
+                footerEl.innerHTML = `<span class="wfa-hl-lora">${escapeHtml(previewTags)}</span>`;
+            } else {
+                footerEl.innerHTML = `<span class="wfa-ck-muted">No active character LoRA tags selected.</span>`;
+            }
         }
     }
+
+    let footerBox = null;
 
     function renderRows() {
         body.innerHTML = "";
@@ -925,6 +1090,7 @@ function buildCharCockpitUI(node, masterTa) {
                     e.preventDefault();
                     e.stopPropagation();
                     slot.lora_name = "None";
+                    lastLiveFeedback = null;
                     persist();
                     renderRows();
                 });
@@ -949,7 +1115,7 @@ function buildCharCockpitUI(node, masterTa) {
                 soloIn.value = slot.str_solo.toFixed(2);
                 lastLiveFeedback = null;
                 persist();
-                updateHeaderSummary();
+                updateHeaderAndFooter(footerBox);
             });
             soloGrp.append(soloLbl, soloIn);
 
@@ -971,15 +1137,32 @@ function buildCharCockpitUI(node, masterTa) {
                 multiIn.value = slot.str_multi.toFixed(2);
                 lastLiveFeedback = null;
                 persist();
-                updateHeaderSummary();
+                updateHeaderAndFooter(footerBox);
             });
             multiGrp.append(multiLbl, multiIn);
 
             row.append(btnEnable, btnOvr, pickWrap, soloGrp, multiGrp);
             body.appendChild(row);
         }
-        updateHeaderSummary();
+
+        footerBox = document.createElement("div");
+        footerBox.className = "wfa-char-footer";
+        attachWheelGuard(footerBox);
+        body.appendChild(footerBox);
+
+        updateHeaderAndFooter(footerBox);
     }
+
+    btnMode.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const order = ["auto", "batch", "ui"];
+        const nextIdx = (order.indexOf(state.mode) + 1) % order.length;
+        state.mode = order[nextIdx];
+        lastLiveFeedback = null;
+        persist();
+        updateHeaderAndFooter(footerBox);
+    });
 
     btnAllOff.addEventListener("mousedown", (e) => {
         e.preventDefault();
@@ -1034,7 +1217,7 @@ function buildCharCockpitUI(node, masterTa) {
 }
 
 /* ============================================================================
- * 2. WFA GENERATION DECK (Unified Center Control Panel)
+ * 2. WFA GENERATION DECK (Unified Control Panel + 2D Aspect Ratio Pad)
  * ========================================================================== */
 const RES_PRESETS = [
     [832, 1216],
@@ -1056,6 +1239,7 @@ function defaultDeckState() {
         width: 896,
         height: 1152,
         snap: 16,
+        pad_max: 1536,
         seed: 4260,
         seed_mode: "increment",
         steps: 28,
@@ -1086,6 +1270,7 @@ function parseDeckState(raw) {
         if (p.width !== undefined) st.width = Math.max(64, parseInt(p.width, 10) || 896);
         if (p.height !== undefined) st.height = Math.max(64, parseInt(p.height, 10) || 1152);
         if (p.snap !== undefined) st.snap = Math.max(1, parseInt(p.snap, 10) || 16);
+        if (p.pad_max !== undefined) st.pad_max = Math.max(512, parseInt(p.pad_max, 10) || 1536);
         if (p.seed !== undefined) st.seed = Math.max(0, parseInt(p.seed, 10) || 0);
         if (p.seed_mode) st.seed_mode = String(p.seed_mode);
         if (p.steps !== undefined) st.steps = Math.max(1, parseInt(p.steps, 10) || 28);
@@ -1121,6 +1306,11 @@ function buildGenerationDeckUI(node, masterTa) {
     ensureStyles();
     masterTa.classList.add("wfa-ck-hidden-ta");
 
+    const stateWidget = node.widgets?.find((w) => w.name === "deck_state");
+    if (stateWidget) {
+        stateWidget.computeSize = () => [260, 180];
+    }
+
     const card = document.createElement("div");
     card.className = "wfa-ck-card";
 
@@ -1148,8 +1338,6 @@ function buildGenerationDeckUI(node, masterTa) {
 
     let st = parseDeckState(masterTa.value);
     let isInternalSync = false;
-
-    const stateWidget = node.widgets?.find((w) => w.name === "deck_state");
 
     function persist() {
         isInternalSync = true;
@@ -1275,10 +1463,29 @@ function buildGenerationDeckUI(node, masterTa) {
         modeLine.append(btnUseBatch, btnFileBatch, bField);
         sec1.append(pkgLine, modeLine);
 
-        /* Section 2: Width × Height + Swap + Snap + Aspect Presets */
+        /* Section 2: Interactive 2D Aspect Ratio & Resolution Pad + Controls */
         const sec2 = document.createElement("div");
         sec2.className = "wfa-deck-sec";
 
+        const wrap2d = document.createElement("div");
+        wrap2d.className = "wfa-res-2d-wrap";
+
+        const PAD_CSS = 114;
+        const MARGIN = 8;
+        const PLOT = PAD_CSS - MARGIN * 2;
+        const dpr = Math.max(2, window.devicePixelRatio || 1);
+
+        const padCanvas = document.createElement("canvas");
+        padCanvas.className = "wfa-res-pad-canvas";
+        padCanvas.width = Math.round(PAD_CSS * dpr);
+        padCanvas.height = Math.round(PAD_CSS * dpr);
+        padCanvas.title =
+            "2D Resolution & Aspect Ratio Pad\n• Drag anywhere to set Width × Height\n• Shift + Drag: Lock 1:1 Square\n• Alt + Drag: Scale keeping current Aspect Ratio";
+
+        const rightCol = document.createElement("div");
+        rightCol.className = "wfa-res-right-col";
+
+        // Right Row 1: W ⇄ H
         const resLine = document.createElement("div");
         resLine.className = "wfa-deck-line";
 
@@ -1290,28 +1497,14 @@ function buildGenerationDeckUI(node, masterTa) {
         wIn.step = String(st.snap || 16);
         wIn.className = "wfa-ck-num";
         wIn.style.flex = "1";
-        wIn.style.minWidth = "52px";
+        wIn.style.minWidth = "46px";
         wIn.value = st.width;
-        wIn.addEventListener("change", () => {
-            st.width = snapValue(wIn.value, st.snap);
-            persist();
-            renderDeck();
-        });
 
         const swapBtn = document.createElement("button");
         swapBtn.type = "button";
         swapBtn.className = "wfa-ck-mini-btn";
         swapBtn.textContent = "⇄";
         swapBtn.title = "Swap Width ↔ Height (Portrait / Landscape)";
-        swapBtn.addEventListener("mousedown", (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const tmp = st.width;
-            st.width = st.height;
-            st.height = tmp;
-            persist();
-            renderDeck();
-        });
 
         const hLbl = document.createElement("span");
         hLbl.className = "wfa-deck-lbl";
@@ -1321,17 +1514,24 @@ function buildGenerationDeckUI(node, masterTa) {
         hIn.step = String(st.snap || 16);
         hIn.className = "wfa-ck-num";
         hIn.style.flex = "1";
-        hIn.style.minWidth = "52px";
+        hIn.style.minWidth = "46px";
         hIn.value = st.height;
-        hIn.addEventListener("change", () => {
-            st.height = snapValue(hIn.value, st.snap);
-            persist();
-            renderDeck();
-        });
 
+        resLine.append(wLbl, wIn, swapBtn, hLbl, hIn);
+
+        // Right Row 2: Snap + Pad Max
+        const snapMaxLine = document.createElement("div");
+        snapMaxLine.className = "wfa-deck-line";
+
+        const snapField = document.createElement("div");
+        snapField.className = "wfa-deck-field";
+        const snapLbl = document.createElement("span");
+        snapLbl.className = "wfa-deck-lbl";
+        snapLbl.textContent = "Snap";
         const snapSel = document.createElement("select");
         snapSel.className = "wfa-ck-select";
-        snapSel.title = "Dimension alignment multiple (16 or 32 prevents right/bottom patch padding blur)";
+        snapSel.style.width = "100%";
+        snapSel.title = "Dimension alignment multiple (÷16 or ÷32 prevents patch-padding edge blur)";
         for (const d of [1, 8, 16, 32, 64]) {
             const opt = document.createElement("option");
             opt.value = String(d);
@@ -1339,42 +1539,250 @@ function buildGenerationDeckUI(node, masterTa) {
             if (st.snap === d) opt.selected = true;
             snapSel.appendChild(opt);
         }
-        snapSel.addEventListener("change", () => {
-            st.snap = parseInt(snapSel.value, 10) || 16;
-            st.width = snapValue(st.width, st.snap);
-            st.height = snapValue(st.height, st.snap);
-            persist();
-            renderDeck();
-        });
+        snapField.append(snapLbl, snapSel);
 
-        resLine.append(wLbl, wIn, swapBtn, hLbl, hIn, snapSel);
+        const maxField = document.createElement("div");
+        maxField.className = "wfa-deck-field";
+        const maxLbl = document.createElement("span");
+        maxLbl.className = "wfa-deck-lbl";
+        maxLbl.textContent = "Max";
+        const maxSel = document.createElement("select");
+        maxSel.className = "wfa-ck-select";
+        maxSel.style.width = "100%";
+        maxSel.title = "Maximum resolution ceiling of the 2D pad";
+        for (const m of [1536, 2048, 2560, 3072]) {
+            const opt = document.createElement("option");
+            opt.value = String(m);
+            opt.textContent = String(m);
+            if ((st.pad_max || 1536) === m) opt.selected = true;
+            maxSel.appendChild(opt);
+        }
+        maxField.append(maxLbl, maxSel);
 
+        snapMaxLine.append(snapField, maxField);
+
+        // Right Row 3 & 4: 3×2 Preset Chips
         const chipsGrid = document.createElement("div");
         chipsGrid.className = "wfa-res-chips";
+        const chipEntries = [];
         for (const [pw, ph] of RES_PRESETS) {
             const chip = document.createElement("button");
             chip.type = "button";
-            const matched = st.width === pw && st.height === ph;
-            chip.className = "wfa-res-chip" + (matched ? " wfa-match" : "");
+            chip.className = "wfa-res-chip";
             chip.textContent = pw === ph ? `${pw}²` : `${pw}×${ph}`;
             chip.addEventListener("mousedown", (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 st.width = snapValue(pw, st.snap);
                 st.height = snapValue(ph, st.snap);
-                persist();
-                renderDeck();
+                syncResControls();
             });
             chipsGrid.appendChild(chip);
+            chipEntries.push({ btn: chip, pw, ph });
         }
 
-        sec2.append(resLine, chipsGrid);
+        rightCol.append(resLine, snapMaxLine, chipsGrid);
+        wrap2d.append(padCanvas, rightCol);
+        sec2.appendChild(wrap2d);
+
+        let isDraggingPad = false;
+        let dragLockedRatio = 1;
+
+        function drawPad() {
+            const ctx = padCanvas.getContext("2d");
+            if (!ctx) return;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.clearRect(0, 0, PAD_CSS, PAD_CSS);
+
+            ctx.fillStyle = "#111115";
+            ctx.fillRect(0, 0, PAD_CSS, PAD_CSS);
+
+            const effMax = Math.max(st.pad_max || 1536, st.width, st.height);
+            const gridStep = effMax > 2048 ? 256 : 128;
+
+            // Dotted grid
+            for (let gx = 0; gx <= effMax; gx += gridStep) {
+                for (let gy = 0; gy <= effMax; gy += gridStep) {
+                    const px = MARGIN + (gx / effMax) * PLOT;
+                    const py = MARGIN + (gy / effMax) * PLOT;
+                    const isMajor = gx % 512 === 0 && gy % 512 === 0;
+                    ctx.fillStyle = isMajor ? "rgba(255, 255, 255, 0.30)" : "rgba(255, 255, 255, 0.11)";
+                    ctx.fillRect(px - 0.6, py - 0.6, isMajor ? 1.5 : 1.1, isMajor ? 1.5 : 1.1);
+                }
+            }
+
+            // 1:1 Square diagonal dashed guide
+            ctx.save();
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 3]);
+            ctx.beginPath();
+            ctx.moveTo(MARGIN, MARGIN);
+            ctx.lineTo(MARGIN + PLOT, MARGIN + PLOT);
+            ctx.stroke();
+            ctx.restore();
+
+            // Active W × H proportional rectangle from top-left origin
+            const rw = Math.max(2, Math.min(PLOT, (st.width / effMax) * PLOT));
+            const rh = Math.max(2, Math.min(PLOT, (st.height / effMax) * PLOT));
+            const tx = MARGIN + rw;
+            const ty = MARGIN + rh;
+
+            ctx.fillStyle = "rgba(74, 222, 128, 0.15)";
+            ctx.fillRect(MARGIN, MARGIN, rw, rh);
+
+            ctx.strokeStyle = isDraggingPad ? "#4ade80" : "rgba(74, 222, 128, 0.80)";
+            ctx.lineWidth = 1.25;
+            ctx.strokeRect(MARGIN, MARGIN, rw, rh);
+
+            // Origin dot (top-left, like mxSlider2D)
+            ctx.beginPath();
+            ctx.arc(MARGIN, MARGIN, 2.3, 0, Math.PI * 2);
+            ctx.fillStyle = "#4ade80";
+            ctx.fill();
+
+            // Handle thumb at (tx, ty)
+            if (isDraggingPad) {
+                ctx.beginPath();
+                ctx.arc(tx, ty, 8.5, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(74, 222, 128, 0.25)";
+                ctx.fill();
+            }
+            ctx.beginPath();
+            ctx.arc(tx, ty, 4.8, 0, Math.PI * 2);
+            ctx.fillStyle = "#141418";
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = isDraggingPad ? "#ffffff" : "#4ade80";
+            ctx.stroke();
+
+            // Bottom-left Aspect Ratio & Megapixels pill overlay
+            const lbl = formatAspectBadge(st.width, st.height);
+            ctx.font = '600 8.5px "JetBrains Mono", Consolas, monospace';
+            const tw = ctx.measureText(lbl).width;
+            const bx = 4;
+            const by = PAD_CSS - 15;
+            ctx.fillStyle = "rgba(14, 14, 18, 0.84)";
+            ctx.fillRect(bx, by, tw + 6, 12);
+            ctx.fillStyle = "#d4d4d8";
+            ctx.fillText(lbl, bx + 3, by + 9);
+        }
+
+        function syncResControls() {
+            wIn.value = st.width;
+            hIn.value = st.height;
+            wIn.step = String(st.snap || 16);
+            hIn.step = String(st.snap || 16);
+            for (const item of chipEntries) {
+                item.btn.classList.toggle("wfa-match", st.width === item.pw && st.height === item.ph);
+            }
+            drawPad();
+            persist();
+        }
+
+        function applyPadPointer(e) {
+            const rect = padCanvas.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            const localX = ((e.clientX - rect.left) / rect.width) * PAD_CSS;
+            const localY = ((e.clientY - rect.top) / rect.height) * PAD_CSS;
+            const normX = Math.max(0, Math.min(1, (localX - MARGIN) / PLOT));
+            const normY = Math.max(0, Math.min(1, (localY - MARGIN) / PLOT));
+
+            const effMax = Math.max(st.pad_max || 1536, 512);
+            let rawW = Math.max(256, normX * effMax);
+            let rawH = Math.max(256, normY * effMax);
+
+            if (e.shiftKey) {
+                const sq = (rawW + rawH) * 0.5;
+                rawW = sq;
+                rawH = sq;
+            } else if (e.altKey && dragLockedRatio > 0) {
+                if (dragLockedRatio >= 1) {
+                    rawH = rawW / dragLockedRatio;
+                } else {
+                    rawW = rawH * dragLockedRatio;
+                }
+                rawW = Math.max(256, Math.min(effMax, rawW));
+                rawH = Math.max(256, Math.min(effMax, rawH));
+            }
+
+            st.width = snapValue(rawW, st.snap);
+            st.height = snapValue(rawH, st.snap);
+            syncResControls();
+        }
+
+        padCanvas.addEventListener("mousedown", (e) => {
+            e.stopPropagation();
+        });
+
+        padCanvas.addEventListener("pointerdown", (e) => {
+            if (e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+            isDraggingPad = true;
+            dragLockedRatio = st.width / Math.max(1, st.height);
+            padCanvas.classList.add("wfa-dragging");
+            try {
+                padCanvas.setPointerCapture(e.pointerId);
+            } catch (_) {}
+            applyPadPointer(e);
+        });
+
+        padCanvas.addEventListener("pointermove", (e) => {
+            if (!isDraggingPad) return;
+            e.preventDefault();
+            e.stopPropagation();
+            applyPadPointer(e);
+        });
+
+        const endPadDrag = (e) => {
+            if (!isDraggingPad) return;
+            e.stopPropagation();
+            isDraggingPad = false;
+            padCanvas.classList.remove("wfa-dragging");
+            try {
+                padCanvas.releasePointerCapture(e.pointerId);
+            } catch (_) {}
+            drawPad();
+        };
+        padCanvas.addEventListener("pointerup", endPadDrag);
+        padCanvas.addEventListener("pointercancel", endPadDrag);
+
+        wIn.addEventListener("change", () => {
+            st.width = snapValue(wIn.value, st.snap);
+            syncResControls();
+        });
+
+        hIn.addEventListener("change", () => {
+            st.height = snapValue(hIn.value, st.snap);
+            syncResControls();
+        });
+
+        swapBtn.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const tmp = st.width;
+            st.width = st.height;
+            st.height = tmp;
+            syncResControls();
+        });
+
+        snapSel.addEventListener("change", () => {
+            st.snap = parseInt(snapSel.value, 10) || 16;
+            st.width = snapValue(st.width, st.snap);
+            st.height = snapValue(st.height, st.snap);
+            syncResControls();
+        });
+
+        maxSel.addEventListener("change", () => {
+            st.pad_max = parseInt(maxSel.value, 10) || 1536;
+            syncResControls();
+        });
 
         /* Section 3: Steps, CFG, Sampler, Scheduler, Seed, Refiner */
         const sec3 = document.createElement("div");
         sec3.className = "wfa-deck-sec";
 
-        // Steps + CFG
         const scLine = document.createElement("div");
         scLine.className = "wfa-deck-line";
 
@@ -1418,7 +1826,6 @@ function buildGenerationDeckUI(node, masterTa) {
         cfgField.append(cfgLbl, cfgIn);
         scLine.append(stpField, cfgField);
 
-        // Sampler + Scheduler
         const smLine = document.createElement("div");
         smLine.className = "wfa-deck-line";
 
@@ -1471,7 +1878,6 @@ function buildGenerationDeckUI(node, masterTa) {
         schField.append(schLbl, schSel);
         smLine.append(smpField, schField);
 
-        // Seed + Control Mode
         const sdLine = document.createElement("div");
         sdLine.className = "wfa-deck-line";
 
@@ -1506,7 +1912,6 @@ function buildGenerationDeckUI(node, masterTa) {
 
         sdLine.append(sdLbl, sdIn, sdModeSel);
 
-        // Refiner % + Refiner Scale
         const rfLine = document.createElement("div");
         rfLine.className = "wfa-deck-line";
 
@@ -1590,6 +1995,11 @@ function buildGenerationDeckUI(node, masterTa) {
         sec4.appendChild(tGrid);
 
         body.append(sec1, sec2, sec3, sec4);
+
+        for (const item of chipEntries) {
+            item.btn.classList.toggle("wfa-match", st.width === item.pw && st.height === item.ph);
+        }
+        drawPad();
         updateBadge();
     }
 
@@ -1627,6 +2037,11 @@ function buildPromptInspectorUI(node, masterTa) {
     masterTa.dataset.wfaCkEnhanced = "true";
     ensureStyles();
     masterTa.classList.add("wfa-ck-hidden-ta");
+
+    const cacheWidget = node.widgets?.find((x) => x.name === "inspector_cache");
+    if (cacheWidget) {
+        cacheWidget.computeSize = () => [220, 130];
+    }
 
     const card = document.createElement("div");
     card.className = "wfa-ck-card";
@@ -1690,8 +2105,7 @@ function buildPromptInspectorUI(node, masterTa) {
         isInternalSync = true;
         const json = JSON.stringify(data);
         masterTa.value = json;
-        const w = node.widgets?.find((x) => x.name === "inspector_cache");
-        if (w) w.value = json;
+        if (cacheWidget) cacheWidget.value = json;
         isInternalSync = false;
     }
 
@@ -1834,6 +2248,7 @@ function tryAttachCockpitNode(node) {
 app.registerExtension({
     name: "WFA.CockpitSuite",
     async setup() {
+        registerPipeColors();
         fetchCockpitMeta(false);
 
         api.addEventListener("wfa-char-cockpit-feedback", ({ detail }) => {
@@ -1849,6 +2264,7 @@ app.registerExtension({
         });
     },
     async nodeCreated(node) {
+        registerPipeColors();
         const cls = node.comfyClass || node.type;
         if (!ALL_COCKPIT_CLASSES.has(cls)) return;
         let attempts = 0;
@@ -1860,34 +2276,42 @@ app.registerExtension({
         setTimeout(poll, 50);
     },
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        if (!ALL_COCKPIT_CLASSES.has(nodeData.name)) return;
+        const isCockpitUI = ALL_COCKPIT_CLASSES.has(nodeData.name);
+        const isPipeHelper = nodeData.name === PIPE_IN_CLASS || nodeData.name === PIPE_OUT_CLASS;
+        if (!isCockpitUI && !isPipeHelper) return;
 
-        const origOnNodeCreated = nodeType.prototype.onNodeCreated;
-        nodeType.prototype.onNodeCreated = function () {
-            const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
-            if (nodeData.name === CHAR_COCKPIT_CLASS) {
-                this.size = [460, 260];
-            } else if (nodeData.name === GEN_DECK_CLASS) {
-                this.size = [350, 410];
-            } else if (nodeData.name === INSPECTOR_CLASS) {
-                this.size = [440, 280];
-            }
-            return res;
-        };
+        if (isCockpitUI) {
+            const origOnNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function () {
+                const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
+                if (nodeData.name === CHAR_COCKPIT_CLASS) {
+                    this.size = [460, 260];
+                } else if (nodeData.name === GEN_DECK_CLASS) {
+                    this.size = [385, 445];
+                } else if (nodeData.name === INSPECTOR_CLASS) {
+                    this.size = [440, 300];
+                }
+                return res;
+            };
 
-        const origOnExecuted = nodeType.prototype.onExecuted;
-        nodeType.prototype.onExecuted = function (output) {
-            const res = origOnExecuted ? origOnExecuted.apply(this, arguments) : undefined;
-            if (nodeData.name === INSPECTOR_CLASS && output?.wfa_inspector?.[0]) {
-                this._wfaApplyInspectorPayload?.(output.wfa_inspector[0]);
-            }
-            return res;
-        };
+            nodeType.prototype.computeSize = function () {
+                return [240, 150];
+            };
 
-        const origOnDrawForeground = nodeType.prototype.onDrawForeground;
-        nodeType.prototype.onDrawForeground = function () {
-            if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
-            tryAttachCockpitNode(this);
-        };
+            const origOnExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = function (output) {
+                const res = origOnExecuted ? origOnExecuted.apply(this, arguments) : undefined;
+                if (nodeData.name === INSPECTOR_CLASS && output?.wfa_inspector?.[0]) {
+                    this._wfaApplyInspectorPayload?.(output.wfa_inspector[0]);
+                }
+                return res;
+            };
+
+            const origOnDrawForeground = nodeType.prototype.onDrawForeground;
+            nodeType.prototype.onDrawForeground = function () {
+                if (origOnDrawForeground) origOnDrawForeground.apply(this, arguments);
+                tryAttachCockpitNode(this);
+            };
+        }
     },
 });
