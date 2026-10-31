@@ -403,14 +403,25 @@ function ensureStyles() {
             outline: none !important;
         }
 
+        .wfa-ck-num {
+            -moz-appearance: textfield !important;
+            appearance: textfield !important;
+        }
+
+        .wfa-ck-num::-webkit-outer-spin-button,
+        .wfa-ck-num::-webkit-inner-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+        }
+
         .wfa-ck-num:focus, .wfa-ck-input:focus, .wfa-ck-select:focus {
             border-color: #38bdf8 !important;
         }
 
         .wfa-str-num {
             width: 44px !important;
-            text-align: right !important;
-            padding: 0 4px !important;
+            text-align: center !important;
+            padding: 0 3px !important;
         }
 
         /* Searchable LoRA Popover */
@@ -775,7 +786,7 @@ function buildCharCockpitUI(node, masterTa) {
 
     const stateWidget = node.widgets?.find((x) => x.name === "cockpit_state");
     if (stateWidget) {
-        stateWidget.computeSize = () => [240, 140];
+        stateWidget.options = { ...(stateWidget.options || {}), getMinHeight: () => 120 };
     }
 
     const card = document.createElement("div");
@@ -1308,7 +1319,7 @@ function buildGenerationDeckUI(node, masterTa) {
 
     const stateWidget = node.widgets?.find((w) => w.name === "deck_state");
     if (stateWidget) {
-        stateWidget.computeSize = () => [260, 180];
+        stateWidget.options = { ...(stateWidget.options || {}), getMinHeight: () => 120 };
     }
 
     const card = document.createElement("div");
@@ -2040,7 +2051,7 @@ function buildPromptInspectorUI(node, masterTa) {
 
     const cacheWidget = node.widgets?.find((x) => x.name === "inspector_cache");
     if (cacheWidget) {
-        cacheWidget.computeSize = () => [220, 130];
+        cacheWidget.options = { ...(cacheWidget.options || {}), getMinHeight: () => 120 };
     }
 
     const card = document.createElement("div");
@@ -2285,17 +2296,13 @@ app.registerExtension({
             nodeType.prototype.onNodeCreated = function () {
                 const res = origOnNodeCreated ? origOnNodeCreated.apply(this, arguments) : undefined;
                 if (nodeData.name === CHAR_COCKPIT_CLASS) {
-                    this.size = [460, 260];
+                    this.size = [470, 300];
                 } else if (nodeData.name === GEN_DECK_CLASS) {
-                    this.size = [385, 445];
+                    this.size = [395, 480];
                 } else if (nodeData.name === INSPECTOR_CLASS) {
                     this.size = [440, 300];
                 }
                 return res;
-            };
-
-            nodeType.prototype.computeSize = function () {
-                return [240, 150];
             };
 
             const origOnExecuted = nodeType.prototype.onExecuted;
