@@ -120,6 +120,21 @@ negative: /*AVOID, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry
   - **1-Click / Wireable `enabled` Bypass Switch**: Set `enabled` to `Bypass` (or wire a dashboard boolean toggle) to pass `image` straight through in `0ms` without needing an external Switch/Bypass node.
   - **Outputs**: `image` (`IMAGE`), `width` (`INT`), `height` (`INT`), plus a live resolution status pill above the node (`896×1152 → 1792×2304 (4x × 0.50)`).
 
+### 9. `WFA Cockpit UI Suite ⚡` (`Character LoRA Cockpit`, `Generation Deck` & `Prompt Inspector`)
+- **Category**: `WFA Node Suite/Cockpit`
+- **Features**:
+  - **`WFA Character LoRA Cockpit ⚡`**: 5-slot (`C1`–`C5`) interactive character LoRA dashboard card replacing 8–20+ LoRA Switch, Override, Solo Strength, Multi/Duo Strength, LoRA Picker, and `<lora:name:wt>` / `LORA_STACK` nodes:
+    - Each row (`C1`–`C5`) provides `[✓ C#]` UI toggle, `[Ovr]` Batch-Override lock, an **instant-search filterable LoRA picker**, and inline **`S` (Solo)** + **`M` (Multi/Duo)** strength inputs.
+    - Automatically switches active characters from `Solo` strength (when 1 character is active) to `Multi` strength (when 2+ characters are active), outputs both `lora_stack` (`LORA_STACK`) and formatted `<lora:basename:wt>` strings (`lora_tags` + `c1_lora_tag`–`c5_lora_tag`), plus resolved `c1_active`–`c5_active` booleans.
+  - **`WFA Generation Deck ⚡`**: Unified center-column control panel replacing 13–15+ separate primitive nodes in one aligned dark dashboard card:
+    - **`PKG` (Package Name)** + **`Prompts: File / UI`** (`use_batch`) + **`File / Manual B-Size`** (`file_batch`) + **`Batch Size`**.
+    - **Resolution Strip**: `Width` × `Height` inputs, **`⇄` Portrait/Landscape Swap**, **`÷16` / `÷32` alignment snap** (prevents right/bottom patch-padding blur in refiners), and 1-click preset chips (`832×1216`, `896×1152`, `1024²`, `1152×896`, `1216×832`, `768×1344`).
+    - **Sampler, Seed & Refiner Grid**: `Steps`, `CFG`, `Sampler`, `Scheduler` (wildcard-compatible with any KSampler/Refiner), `Seed` (`increment` / `fixed` / `randomize` / `decrement` + **`🎲 New Seed`** button, auto-advancing on every queued generation), `Refiner %`, and `Refiner ×` scale.
+    - **4 Customizable Feature Toggle Pills (`toggle_1`–`toggle_4`)**: Click to toggle `true`/`false` (e.g. `Color Match`, `2nd Refiner`, `Upscale 2x`, `3rd Refiner`); **`Shift + Click`** any pill to rename it.
+  - **`WFA Prompt Inspector ⚡`**: Merges `Final Prompt` + `Token Log` into one dark syntax-highlighted viewer:
+    - Displays live **`● N tok`** count (exact model tokens when `clip` is wired, or fast BPE estimate with zero extra wires), **`LoRA`** count, **`Copy`** button, and an automatic amber **`⚠ /*...*/`** warning badge if any unreplaced template placeholder remains.
+    - Switch between color-highlighted **`Prompt`** view (`<lora:...>` emerald, `(weight:1.2)` cyan, `{a|b}` violet, `/*UNREPLACED*/` amber) and per-tag **`Tokens`** breakdown table.
+
 ## Installation
 
 ### Via ComfyUI-Manager
