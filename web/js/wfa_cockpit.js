@@ -69,13 +69,54 @@ function escapeHtml(str) {
         .replace(/"/g, "&quot;");
 }
 
+async function copyTextToClipboard(text) {
+    const val = String(text || "");
+    if (!val) return false;
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            await navigator.clipboard.writeText(val);
+            return true;
+        }
+    } catch (_) {}
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = val;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return ok;
+    } catch (_) {
+        return false;
+    }
+}
+
+function flashCopiedChip(el, originalText) {
+    if (!el) return;
+    if (el._wfaCopyTimer) clearTimeout(el._wfaCopyTimer);
+    el.classList.add("wfa-copied");
+    el.textContent = "✓ Copied!";
+    el._wfaCopyTimer = setTimeout(() => {
+        el.classList.remove("wfa-copied");
+        el.textContent = originalText;
+        el._wfaCopyTimer = null;
+    }, 950);
+}
+
 function highlightPromptHtml(raw) {
     if (!raw) {
         return `<span class="wfa-ck-muted">Run a generation to inspect the compiled prompt & token breakdown...</span>`;
     }
     let html = escapeHtml(raw);
     html = html.replace(/\/\*[\s\S]*?\*\//g, (m) => `<span class="wfa-hl-warn" title="Unreplaced comment/placeholder">${m}</span>`);
-    html = html.replace(/&lt;lora:[^&]+?&gt;/gi, (m) => `<span class="wfa-hl-lora">${m}</span>`);
+    html = html.replace(
+        /&lt;lora:[^&]+?&gt;/gi,
+        (m) => `<span class="wfa-hl-lora wfa-lora-copy-chip" title="Click to copy LoRA tag to clipboard">${m}</span>`
+    );
     html = html.replace(/\{[^{}\n]+\}/g, (m) => `<span class="wfa-hl-dyn">${m}</span>`);
     html = html.replace(/\([^()\n]+:\s*-?\d+(?:\.\d+)?\)/g, (m) => `<span class="wfa-hl-wt">${m}</span>`);
     return html;
@@ -270,6 +311,12 @@ function ensureStyles() {
             overflow-y: auto !important;
             word-break: break-word !important;
             box-sizing: border-box !important;
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: wrap !important;
+            align-content: flex-start !important;
+            align-items: center !important;
+            gap: 4px !important;
         }
 
         .wfa-char-toggle {
@@ -646,8 +693,26 @@ function ensureStyles() {
             background: rgba(74, 222, 128, 0.12) !important;
             border: 1px solid rgba(74, 222, 128, 0.32) !important;
             border-radius: 3px !important;
-            padding: 0 3px !important;
+            padding: 0 4px !important;
             font-weight: 600 !important;
+        }
+
+        .wfa-lora-copy-chip {
+            cursor: pointer !important;
+            display: inline-block !important;
+            transition: background 0.1s ease, border-color 0.1s ease, color 0.1s ease !important;
+        }
+
+        .wfa-lora-copy-chip:hover {
+            background: rgba(74, 222, 128, 0.24) !important;
+            border-color: #4ade80 !important;
+            color: #bbf7d0 !important;
+        }
+
+        .wfa-lora-copy-chip.wfa-copied {
+            background: rgba(74, 222, 128, 0.32) !important;
+            border-color: #86efac !important;
+            color: #ffffff !important;
         }
 
         .wfa-hl-warn {
@@ -965,9 +1030,12 @@ function buildCharCockpitUI(node, masterTa) {
         setTimeout(() => searchIn.focus(), 10);
     }
 
-    function computeLocalPreviewTags() {
+    function computeLocalPreviewTagList() {
         if (lastLiveFeedback && typeof lastLiveFeedback.lora_tags === "string") {
-            return lastLiveFeedback.lora_tags;
+            return lastLiveFeedback.lora_tags
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean);
         }
         const activeIdxs = state.slots
             .map((s, idx) => (s.ui_enable ? idx : -1))
@@ -983,7 +1051,7 @@ function buildCharCockpitUI(node, masterTa) {
                 }
             }
         }
-        return tags.join(", ");
+        return tags;
     }
 
     function updateHeaderAndFooter(footerEl) {
@@ -1025,9 +1093,39 @@ function buildCharCockpitUI(node, masterTa) {
         }
 
         if (footerEl) {
-            const previewTags = computeLocalPreviewTags();
-            if (previewTags) {
-                footerEl.innerHTML = `<span class="wfa-hl-lora">${escapeHtml(previewTags)}</span>`;
+            footerEl.innerHTML = "";
+            const tagList = computeLocalPreviewTagList();
+            if (tagList.length) {
+                for (const tag of tagList) {
+                    const chip = document.createElement("span");
+                    chip.className = "wfa-hl-lora wfa-lora-copy-chip";
+                    chip.textContent = tag;
+                    chip.title = `Click to copy ${tag} to clipboard`;
+                    chip.addEventListener("mousedown", async (e) => {
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ok = await copyTextToClipboard(tag);
+                        if (ok) flashCopiedChip(chip, tag);
+                    });
+                    footerEl.appendChild(chip);
+                }
+                if (tagList.length >= 2) {
+                    const allJoined = tagList.join(", ");
+                    const copyAllBtn = document.createElement("button");
+                    copyAllBtn.type = "button";
+                    copyAllBtn.className = "wfa-ck-mini-btn";
+                    copyAllBtn.textContent = "Copy All";
+                    copyAllBtn.title = `Copy all ${tagList.length} active LoRA tags`;
+                    copyAllBtn.addEventListener("mousedown", async (e) => {
+                        if (e.button !== 0) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const ok = await copyTextToClipboard(allJoined);
+                        if (ok) flashCopiedChip(copyAllBtn, "Copy All");
+                    });
+                    footerEl.appendChild(copyAllBtn);
+                }
             } else {
                 footerEl.innerHTML = `<span class="wfa-ck-muted">No active character LoRA tags selected.</span>`;
             }
@@ -2141,6 +2239,21 @@ function buildPromptInspectorUI(node, masterTa) {
             const pBox = document.createElement("div");
             pBox.className = "wfa-insp-prompt";
             pBox.innerHTML = highlightPromptHtml(data.text);
+            pBox.addEventListener("mousedown", (e) => {
+                if (e.target.closest?.(".wfa-lora-copy-chip")) {
+                    e.stopPropagation();
+                }
+            });
+            pBox.addEventListener("click", async (e) => {
+                const chip = e.target.closest?.(".wfa-lora-copy-chip");
+                if (!chip || window.getSelection?.()?.toString()) return;
+                e.preventDefault();
+                e.stopPropagation();
+                const rawTag = chip.dataset.origTag || chip.textContent || "";
+                chip.dataset.origTag = rawTag;
+                const ok = await copyTextToClipboard(rawTag);
+                if (ok) flashCopiedChip(chip, rawTag);
+            });
             body.appendChild(pBox);
         } else {
             const rows = data.breakdown || [];
@@ -2157,13 +2270,24 @@ function buildPromptInspectorUI(node, masterTa) {
                     const t = document.createElement("div");
                     t.className = "wfa-insp-tag";
                     t.textContent = item.tag;
-                    t.title = item.tag;
+                    t.title = item.kind === "lora" ? `Click to copy ${item.tag}` : item.tag;
 
                     const k = document.createElement("div");
                     k.className =
                         "wfa-insp-tok" +
-                        (item.kind === "lora" ? " wfa-lora" : item.kind === "warn" ? " wfa-warn" : "");
+                        (item.kind === "lora" ? " wfa-lora wfa-lora-copy-chip" : item.kind === "warn" ? " wfa-warn" : "");
                     k.textContent = item.kind === "lora" ? "LoRA" : `${item.tokens}t`;
+
+                    if (item.kind === "lora") {
+                        r.style.cursor = "pointer";
+                        r.addEventListener("mousedown", async (e) => {
+                            if (e.button !== 0) return;
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const ok = await copyTextToClipboard(item.tag);
+                            if (ok) flashCopiedChip(k, "LoRA");
+                        });
+                    }
 
                     r.append(t, k);
                     body.appendChild(r);
@@ -2189,13 +2313,8 @@ function buildPromptInspectorUI(node, masterTa) {
     btnCopy.addEventListener("mousedown", async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        try {
-            await navigator.clipboard.writeText(data.text || "");
-            btnCopy.textContent = "✓ Copied";
-            setTimeout(() => {
-                btnCopy.textContent = "Copy";
-            }, 1100);
-        } catch (_) {}
+        const ok = await copyTextToClipboard(data.text || "");
+        if (ok) flashCopiedChip(btnCopy, "Copy");
     });
 
     const protoDesc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value");
