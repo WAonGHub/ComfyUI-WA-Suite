@@ -731,10 +731,10 @@ def _resolve_single_scope(
         elif rule["action"] == "REPLACE":
             rep_str = rule["replacement"]
             rep_norm = rule["replacement_norm"]
+            rep_word_pat = _compile_single_atom(f"~{rep_norm}")[0] if rep_norm else None
             # Check if another non-targeted tag in this scope already contains the replacement word
             other_has_rep = False
-            if rep_norm:
-                rep_word_pat, _ = _compile_single_atom(f"~{rep_norm}")
+            if rep_word_pat is not None:
                 for seg in segments:
                     if not seg["alive"] or seg["is_special"] or not seg["norm"]:
                         continue
@@ -742,12 +742,30 @@ def _resolve_single_scope(
                         other_has_rep = True
                         break
 
+            open_prefix_re = re.compile(r"^(?:partially[\s_]+|wide[\s_]+)?(?:open|unbuttoned)[\s_]+", re.IGNORECASE)
+
             for seg in segments:
                 if not seg["alive"] or seg["is_special"] or not seg["norm"]:
                     continue
                 if target_grp.matches_tag(seg["norm"], groups_map):
                     old_name = seg["core_raw"].strip()
-                    if not rep_str or other_has_rep:
+                    # Preserve color/style adjectives when rewriting e.g. `open crimson hanfu` -> `crimson hanfu`
+                    stripped_adj = open_prefix_re.sub("", old_name).strip()
+                    stripped_adj_norm = _normalize_phrase(stripped_adj)
+                    if (
+                        rep_word_pat is not None
+                        and stripped_adj
+                        and stripped_adj_norm != seg["norm"]
+                        and stripped_adj_norm != rep_norm
+                        and rep_word_pat.search(stripped_adj_norm)
+                    ):
+                        replaced_log.append(f"{old_name}→{stripped_adj}")
+                        seg["core_raw"] = stripped_adj
+                        seg["norm"] = stripped_adj_norm
+                        seg["raw"] = f"{seg['prefix']}{stripped_adj}{seg['weight_str']}{seg['suffix']}"
+                        other_has_rep = True
+                        did_affect = True
+                    elif not rep_str or other_has_rep:
                         replaced_log.append(f"{old_name}→(removed)")
                         rem_p, rem_s, unmatched_close = _strip_balanced_wrappers(seg["prefix"], seg["suffix"])
                         kept_shell = rem_p + (seg["weight_str"] if unmatched_close else "") + rem_s

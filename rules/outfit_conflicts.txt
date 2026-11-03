@@ -48,20 +48,20 @@
 # ------------------------------------------------------------------------------
 # 2. REVEAL / STATE MODIFIERS (`@group`)
 # ------------------------------------------------------------------------------
-# Front-opening tops/dresses reveal inner chest layers from FRONT / SIDE / ABOVE, NOT from BACK:
-@group OPEN_FRONT   = ~open *shirt, ~open *blouse, ~open *dress, ~open *sweater, ~open *cardigan, ~open *jacket, ~open *coat, ~open *blazer, ~open clothes, ~unbuttoned, ~partially unbuttoned, ~unzipped, front zipper, plunging neckline, ~cleavage, ~breasts out, ~breast slip, ~nipple slip, clothes pull, shirt pull, dress pull, -~unzipped pants, -~unzipped shorts, -~unzipped jeans, -~unzipped skirt, -~unbuttoned pants, -~unbuttoned shorts
+# Front-opening tops/dresses/robes reveal inner chest layers from FRONT / SIDE / ABOVE, NOT from BACK:
+@group OPEN_FRONT   = ~open *shirt, ~open *blouse, ~open *dress, ~open *hanfu, ~open *kimono, ~open *yukata, ~open *robe, ~open *haori, ~open *sweater, ~open *cardigan, ~open *jacket, ~open *coat, ~open *blazer, ~open clothes, ~unbuttoned, ~partially unbuttoned, ~unzipped, front zipper, plunging neckline, ~cleavage, ~breasts out, ~breast slip, ~nipple slip, clothes pull, shirt pull, dress pull, hanfu pull, kimono pull, -~unzipped pants, -~unzipped shorts, -~unzipped jeans, -~unzipped skirt, -~unbuttoned pants, -~unbuttoned shorts
 
-# Back-opening garments reveal inner back/straps from BACK:
+# Back-opening garments reveal inner back/straps/wraps from BACK:
 @group OPEN_BACK    = ~backless, ~open back, virgin killer sweater
 
 # All-angle upper reveals (visible from FRONT, SIDE, and BACK):
-@group TOP_REVEAL   = ~shirt lift, ~sweater lift, ~dress lift, ~clothes lift, ~lifting own clothes, ~torn, ~ripped, ~see-through, ~sheer, ~wet shirt, ~wet clothes, ~transparent, ~off shoulder, ~bare shoulders, ~strap slip, ~undressing, ~mirror, ~reflection
+@group TOP_REVEAL   = ~shirt lift, ~sweater lift, ~dress lift, ~hanfu lift, ~kimono lift, ~clothes lift, ~lifting own clothes, ~torn, ~ripped, ~see-through, ~sheer, ~wet shirt, ~wet clothes, ~transparent, ~off shoulder, ~bare shoulders, ~strap slip, ~undressing, ~mirror, ~reflection
 
 # Closed heavy outerwear (hides inner torso layers if neither jacket nor top is open):
-@group CLOSED_OUTER = closed jacket, closed coat, closed blazer, closed cardigan, buttoned coat, zipped jacket
+@group CLOSED_OUTER = closed jacket, closed coat, closed blazer, closed cardigan, closed haori, closed robe, buttoned coat, zipped jacket
 
-# Skirt / Dress lower reveals (when panties under a skirt/dress ARE visible):
-@group SKIRT_REVEAL = ~skirt lift, ~dress lift, ~clothes lift, ~lifting own clothes, ~upskirt, ~pantyshot, ~wind lift, ~skirt flip, ~skirt pull, ~skirt tug, ~skirt hold, ~skirt aside, ~dress pull, ~dress tug, ~dress aside, ~panties aside, ~panty pull, ~panties around one leg, ~see-through, ~sheer, ~torn skirt, ~torn dress, ass visible through thighs, ~mirror
+# Skirt / Dress / Hanfu / Kimono lower reveals (when panties under a skirt/dress/robe ARE visible):
+@group SKIRT_REVEAL = ~skirt lift, ~dress lift, ~hanfu lift, ~kimono lift, ~clothes lift, ~lifting own clothes, ~upskirt, ~pantyshot, ~wind lift, ~skirt flip, ~skirt pull, ~skirt tug, ~skirt hold, ~skirt aside, ~dress pull, ~dress tug, ~dress aside, ~hanfu pull, ~hanfu aside, ~kimono pull, ~kimono aside, ~panties aside, ~panty pull, ~panties around one leg, ~see-through, ~sheer, ~torn skirt, ~torn dress, ~torn hanfu, ~torn kimono, ass visible through thighs, ~mirror
 
 # Shorts / Pants lower reveals (when panties under pants/shorts ARE visible):
 @group PANTS_REVEAL = ~pants pull, ~shorts pull, ~pants down, ~shorts down, ~pants around one leg, ~shorts around one leg, ~shorts aside, ~pants aside, ~unbuttoned pants, ~unbuttoned shorts, ~unzipped pants, ~unzipped shorts, ~unzipped jeans, ~open belt, ~open fly, ~whale tail, ~panties peek, ~lowleg pants, ~torn pants, ~torn shorts
@@ -70,14 +70,17 @@
 # ------------------------------------------------------------------------------
 # 3. GARMENT LAYER GROUPS (`@group`)
 # ------------------------------------------------------------------------------
-@group BRAS      = ~bra, ~bikini top, ~bandeau, ~bustier, -~no bra, -~braless
-@group TOPS      = ~shirt, ~sweatshirt, ~undershirt, ~overshirt, ~nightshirt, ~blouse, ~sweater, ~turtleneck, ~hoodie, ~jersey, ~camisole, ~tank top, ~crop top, ~tube top, -~no shirt, -~shirtless, -~shirt lift, -~sweater lift, -~clothes lift, -~shirt pull, -~shirt tug, -~holding shirt, -~shirt dress, -~shirtdress
-@group DRESSES   = ~dress, ~sundress, ~minidress, ~microdress, ~shirtdress, ~nightdress, ~gown, -~no dress, -~dress lift, -~dress pull, -~dress tug, -~dress aside, -~under dress, -~undressing, -~dress shirt, -~dress pants, -~dress shoes, -~dress straps
-@group OUTERWEAR = ~jacket, ~blazer, ~coat, ~cardigan, -~no jacket, -~no coat
+@group STD_BRAS  = ~bra, ~bikini top, ~bandeau, ~bustier, -~no bra, -~braless
+@group SARASHI   = ~chest sarashi, ~sarashi, -~pelvic sarashi, -~no sarashi
+@group BRAS      = STD_BRAS, SARASHI
 
-@group PANTIES   = ~panties, ~bikini bottom, ~thong, ~g-string, ~fundoshi, ~shimapan, -~no panties, -~pantyless, -~under pantyhose, -~over pantyhose, -~panties aside, -~panty pull, -~panties around one leg
+@group TOPS      = ~shirt, ~sweatshirt, ~undershirt, ~overshirt, ~nightshirt, ~blouse, ~sweater, ~turtleneck, ~hoodie, ~jersey, ~camisole, ~tank top, ~crop top, ~tube top, -~no shirt, -~shirtless, -~shirt lift, -~sweater lift, -~clothes lift, -~shirt pull, -~shirt tug, -~holding shirt, -~shirt dress, -~shirtdress
+@group DRESSES   = ~dress, ~sundress, ~minidress, ~microdress, ~shirtdress, ~nightdress, ~gown, ~hanfu, ~kimono, ~yukata, ~cheongsam, ~qipao, ~robe, -~no dress, -~dress lift, -~dress pull, -~dress tug, -~dress aside, -~hanfu lift, -~hanfu pull, -~hanfu aside, -~kimono lift, -~kimono pull, -~kimono aside, -~under dress, -~undressing, -~dress shirt, -~dress pants, -~dress shoes, -~dress straps
+@group OUTERWEAR = ~jacket, ~blazer, ~coat, ~cardigan, ~haori, -~no jacket, -~no coat, -~no haori
+
+@group PANTIES   = ~panties, ~bikini bottom, ~thong, ~g-string, ~fundoshi, ~pelvic sarashi, ~shimapan, -~no panties, -~pantyless, -~under pantyhose, -~over pantyhose, -~panties aside, -~panty pull, -~panties around one leg
 @group LEGWEAR   = ~pantyhose, ~tights, ~bodystocking, -~no pantyhose, -~under pantyhose, -~over pantyhose
-@group SKIRTS    = ~skirt, ~miniskirt, ~microskirt, ~overskirt, -~no skirt, -~upskirt, -~skirt lift, -~skirt flip, -~skirt pull, -~skirt tug, -~skirt hold, -~skirt aside, -~under skirt
+@group SKIRTS    = ~skirt, ~miniskirt, ~microskirt, ~overskirt, ~hakama, -~no skirt, -~no hakama, -~upskirt, -~skirt lift, -~skirt flip, -~skirt pull, -~skirt tug, -~skirt hold, -~skirt aside, -~under skirt
 @group PANTS     = ~pants, ~jeans, ~trousers, ~shorts, ~bloomers, ~leggings, ~bike shorts, -~no pants, -~no shorts, -~under skirt, -~under dress, -~pants pull, -~shorts pull, -~pants down, -~shorts down, -~pants around one leg, -~shorts around one leg, -~shorts aside, -~pants aside
 
 
@@ -85,31 +88,40 @@
 # STAGE 1: DIRECTIONAL & LAYER OCCLUSION RULES (`HIDE` / `REPLACE`)
 # ==============================================================================
 
-# --- A. Upper Body: Bra vs Shirt / Sweater / Dress ---
-# 1. From BEHIND: An `open shirt` or `unbuttoned` front does NOT show the bra through the back of a shirt/dress!
-#    Hide the bra unless the garment is backless (`OPEN_BACK`) or lifted/sheer/torn (`TOP_REVEAL`), and push `bra` to negative so LoRAs don't draw straps over the shirt's back.
-HIDE BRAS | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS OPEN_BACK, TOP_REVEAL | +NEG bra, bra straps
+# --- A. Upper Body: Bra & Chest Sarashi vs Shirt / Sweater / Dress / Hanfu / Kimono ---
+# 1. From BEHIND: An `open shirt` or `open hanfu` front does NOT show the bra or chest sarashi through the back!
+#    Hide inner chest layers unless backless (`OPEN_BACK`) or lifted/sheer/off-shoulder (`TOP_REVEAL`), and push matching negatives so LoRAs don't draw straps/wraps over the back.
+HIDE STD_BRAS | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS OPEN_BACK, TOP_REVEAL | +NEG bra, bra straps
+HIDE SARASHI  | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS OPEN_BACK, TOP_REVEAL | +NEG sarashi, chest sarashi
 
-# 2. From BEHIND: Clean up front-only torso tags (`open shirt`, `cleavage`, `unbuttoned`) so the model doesn't
+# 2. From BEHIND: Clean up front-only torso tags (`open shirt`, `open hanfu`, `cleavage`, `unbuttoned`) so the model doesn't
 #    hallucinate a front collar on the spine or twist the character backward when clothed from behind.
-REPLACE open shirt, unbuttoned shirt => shirt     | WHEN TOPS, open shirt, unbuttoned shirt | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
-REPLACE open blouse, unbuttoned blouse => blouse  | WHEN TOPS, open blouse, unbuttoned blouse | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
-REPLACE open dress => dress                       | WHEN DRESSES, open dress | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
-REPLACE open sweater => sweater                   | WHEN TOPS, open sweater | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *shirt, ~unbuttoned *shirt   => shirt   | WHEN TOPS      | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *blouse, ~unbuttoned *blouse => blouse  | WHEN TOPS      | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *dress                       => dress   | WHEN DRESSES   | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *hanfu                       => hanfu   | WHEN DRESSES   | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *kimono                      => kimono  | WHEN DRESSES   | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *yukata                      => yukata  | WHEN DRESSES   | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *robe                        => robe    | WHEN DRESSES   | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *sweater                     => sweater | WHEN TOPS      | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE ~open *haori                       => haori   | WHEN OUTERWEAR | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
 HIDE ~cleavage, unbuttoned, partially unbuttoned, open clothes, front zipper, plunging neckline, ~breasts out, ~breast slip, ~nipple slip | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS FRONT, SIDE, TOP_REVEAL
 
-# 3. From FRONT / SIDE / ABOVE: Hide bra under a closed top or dress unless opened in front (`OPEN_FRONT`) or lifted/sheer (`TOP_REVEAL`).
+# 3. From FRONT / SIDE / ABOVE: Hide bra & chest sarashi under a closed top/dress/hanfu unless opened in front (`OPEN_FRONT`) or lifted/sheer (`TOP_REVEAL`).
 HIDE BRAS | WHEN TOPS, DRESSES | VIEW !BACK | UNLESS OPEN_FRONT, TOP_REVEAL
 
-# 4. Explicitly closed outerwear hides bra even from front unless lifted/sheer:
+# 4. Explicitly closed outerwear hides bra & chest sarashi even from front unless lifted/sheer:
 HIDE BRAS | WHEN CLOSED_OUTER | VIEW ANY | UNLESS TOP_REVEAL
 
+# 5. Chest sarashi wraps tightly over the bust, obscuring a regular bra if both situational nodes are left enabled:
+HIDE STD_BRAS | WHEN SARASHI | VIEW ANY
 
-# --- B. Lower Body: Panties vs Skirt / Dress / Pants / Shorts ---
-# 5. Skirt or Dress obscures Panties from normal angles unless lifted, viewed from below, upskirt, or seated with spread legs:
+
+# --- B. Lower Body: Panties vs Skirt / Dress / Hanfu / Pants / Shorts ---
+# 6. Skirt, Dress, or Hanfu obscures Panties from normal angles unless lifted, viewed from below, upskirt, or seated with spread legs:
 HIDE PANTIES | WHEN SKIRTS, DRESSES | VIEW ANY | UNLESS VIEW:BELOW, SKIRT_REVEAL, sitting + ~spread legs, squatting + ~spread legs, all fours + VIEW:BACK, bent over + VIEW:BACK
 
-# 6. Pants / Shorts / Leggings obscure Panties from all angles unless pulled down/aside or peeking:
+# 7. Pants / Shorts / Leggings obscure Panties from all angles unless pulled down/aside or peeking:
 HIDE PANTIES | WHEN PANTS | VIEW ANY | UNLESS PANTS_REVEAL, unzipped + !OUTERWEAR
 
 
