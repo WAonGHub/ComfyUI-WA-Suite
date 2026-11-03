@@ -1,0 +1,129 @@
+# ==============================================================================
+# WFA Outfit & Perspective Conflict Rulesheet (outfit_conflicts.txt)
+# ==============================================================================
+# Hot-reloads automatically whenever you edit & save this file (no restart needed).
+# You can also duplicate this file into new .txt presets inside the `rules/` folder!
+#
+# QUICK SYNTAX GUIDE:
+#   1. Pattern Matching:
+#      - Exact tag     : `open shirt`     (matches exact tag, ignores `_` vs space & `(tag:1.2)` weights)
+#      - Word match `~`: `~bra`           (matches any tag containing the whole word `bra`, e.g. `white lace bra`,
+#                                          NEVER matches `braid`, `bracelet`, `braless`, or `no bra`!)
+#      - Wildcard `*`  : `*skirt`         (character wildcard: matches `skirt`, `miniskirt`, `pleated miniskirt`)
+#      - Group exclude : `-skirt lift`    (inside `@group`, vetoes non-garment action/modifier tags)
+#
+#   2. Definitions:
+#      @view  <NAME> = pattern1, pattern2, ...      (if none match in prompt, defaults to `FRONT`)
+#      @group <NAME> = pattern1, -exclude1, ...     (reusable group of garments or reveal modifiers)
+#
+#   3. Rules (evaluated in 2 stages — Occlusion FIRST, Combos SECOND!):
+#      - Stage 1 (Occlusion & Rewrites):
+#          HIDE <targets>                  | WHEN <cond> | VIEW <views> | UNLESS <cond> | +NEG <neg_tags>
+#          REPLACE <targets> => <new_tag>  | WHEN <cond> | VIEW <views> | UNLESS <cond> | +NEG <neg_tags>
+#      - Stage 2 (Visible-Only Overlaps — runs AFTER Stage 1 so hidden items never trigger combos!):
+#          COMBO <itemA> + <itemB> => <combo_tag> | VIEW <views> | UNLESS <cond> | PLACEHOLDER /*...*/
+#      - Stage 3 (Conditional Negative Reinforcements):
+#          NEG <neg_tags>                  | WHEN <cond> | VIEW <views> | UNLESS <cond>
+#
+#   4. Condition Logic in `WHEN` and `UNLESS`:
+#      - Comma `,` = OR   (e.g. `WHEN TOPS, DRESSES`)
+#      - Plus  `+` = AND  (e.g. `UNLESS sitting + ~spread legs`)
+#      - Bang  `!` = NOT  (e.g. `VIEW !BACK`)
+# ==============================================================================
+
+
+# ------------------------------------------------------------------------------
+# 1. CAMERA PERSPECTIVES (`@view`)
+# ------------------------------------------------------------------------------
+# Multiple views can be active simultaneously (e.g. `from behind, from below` = BACK + BELOW).
+# When no `@view` tag is found in the prompt, `FRONT` is assumed automatically.
+
+@view BACK  = from behind, facing away, facing back, rear view, back view, ass focus
+@view BELOW = from below, upskirt, low angle, worm's-eye view
+@view ABOVE = from above, high angle, bird's-eye view
+@view SIDE  = from side, profile
+@view FRONT = from front, straight-on, facing viewer
+
+
+# ------------------------------------------------------------------------------
+# 2. REVEAL / STATE MODIFIERS (`@group`)
+# ------------------------------------------------------------------------------
+# Front-opening tops/dresses reveal inner chest layers from FRONT / SIDE / ABOVE, NOT from BACK:
+@group OPEN_FRONT   = ~open *shirt, ~open *blouse, ~open *dress, ~open *sweater, ~open *cardigan, ~open *jacket, ~open *coat, ~open *blazer, ~open clothes, ~unbuttoned, ~partially unbuttoned, ~unzipped, front zipper, plunging neckline, ~cleavage, ~breasts out, ~breast slip, ~nipple slip, clothes pull, shirt pull, dress pull, -~unzipped pants, -~unzipped shorts, -~unzipped jeans, -~unzipped skirt, -~unbuttoned pants, -~unbuttoned shorts
+
+# Back-opening garments reveal inner back/straps from BACK:
+@group OPEN_BACK    = ~backless, ~open back, virgin killer sweater
+
+# All-angle upper reveals (visible from FRONT, SIDE, and BACK):
+@group TOP_REVEAL   = ~shirt lift, ~sweater lift, ~dress lift, ~clothes lift, ~lifting own clothes, ~torn, ~ripped, ~see-through, ~sheer, ~wet shirt, ~wet clothes, ~transparent, ~off shoulder, ~bare shoulders, ~strap slip, ~undressing, ~mirror, ~reflection
+
+# Closed heavy outerwear (hides inner torso layers if neither jacket nor top is open):
+@group CLOSED_OUTER = closed jacket, closed coat, closed blazer, closed cardigan, buttoned coat, zipped jacket
+
+# Skirt / Dress lower reveals (when panties under a skirt/dress ARE visible):
+@group SKIRT_REVEAL = ~skirt lift, ~dress lift, ~clothes lift, ~lifting own clothes, ~upskirt, ~pantyshot, ~wind lift, ~skirt flip, ~skirt pull, ~skirt tug, ~skirt hold, ~skirt aside, ~dress pull, ~dress tug, ~dress aside, ~panties aside, ~panty pull, ~panties around one leg, ~see-through, ~sheer, ~torn skirt, ~torn dress, ass visible through thighs, ~mirror
+
+# Shorts / Pants lower reveals (when panties under pants/shorts ARE visible):
+@group PANTS_REVEAL = ~pants pull, ~shorts pull, ~pants down, ~shorts down, ~pants around one leg, ~shorts around one leg, ~shorts aside, ~pants aside, ~unbuttoned pants, ~unbuttoned shorts, ~unzipped pants, ~unzipped shorts, ~unzipped jeans, ~open belt, ~open fly, ~whale tail, ~panties peek, ~lowleg pants, ~torn pants, ~torn shorts
+
+
+# ------------------------------------------------------------------------------
+# 3. GARMENT LAYER GROUPS (`@group`)
+# ------------------------------------------------------------------------------
+@group BRAS      = ~bra, ~bikini top, ~bandeau, ~bustier, -~no bra, -~braless
+@group TOPS      = ~shirt, ~sweatshirt, ~undershirt, ~overshirt, ~nightshirt, ~blouse, ~sweater, ~turtleneck, ~hoodie, ~jersey, ~camisole, ~tank top, ~crop top, ~tube top, -~no shirt, -~shirtless, -~shirt lift, -~sweater lift, -~clothes lift, -~shirt pull, -~shirt tug, -~holding shirt, -~shirt dress, -~shirtdress
+@group DRESSES   = ~dress, ~sundress, ~minidress, ~microdress, ~shirtdress, ~nightdress, ~gown, -~no dress, -~dress lift, -~dress pull, -~dress tug, -~dress aside, -~under dress, -~undressing, -~dress shirt, -~dress pants, -~dress shoes, -~dress straps
+@group OUTERWEAR = ~jacket, ~blazer, ~coat, ~cardigan, -~no jacket, -~no coat
+
+@group PANTIES   = ~panties, ~bikini bottom, ~thong, ~g-string, ~fundoshi, ~shimapan, -~no panties, -~pantyless, -~under pantyhose, -~over pantyhose, -~panties aside, -~panty pull, -~panties around one leg
+@group LEGWEAR   = ~pantyhose, ~tights, ~bodystocking, -~no pantyhose, -~under pantyhose, -~over pantyhose
+@group SKIRTS    = ~skirt, ~miniskirt, ~microskirt, ~overskirt, -~no skirt, -~upskirt, -~skirt lift, -~skirt flip, -~skirt pull, -~skirt tug, -~skirt hold, -~skirt aside, -~under skirt
+@group PANTS     = ~pants, ~jeans, ~trousers, ~shorts, ~bloomers, ~leggings, ~bike shorts, -~no pants, -~no shorts, -~under skirt, -~under dress, -~pants pull, -~shorts pull, -~pants down, -~shorts down, -~pants around one leg, -~shorts around one leg, -~shorts aside, -~pants aside
+
+
+# ==============================================================================
+# STAGE 1: DIRECTIONAL & LAYER OCCLUSION RULES (`HIDE` / `REPLACE`)
+# ==============================================================================
+
+# --- A. Upper Body: Bra vs Shirt / Sweater / Dress ---
+# 1. From BEHIND: An `open shirt` or `unbuttoned` front does NOT show the bra through the back of a shirt/dress!
+#    Hide the bra unless the garment is backless (`OPEN_BACK`) or lifted/sheer/torn (`TOP_REVEAL`), and push `bra` to negative so LoRAs don't draw straps over the shirt's back.
+HIDE BRAS | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS OPEN_BACK, TOP_REVEAL | +NEG bra, bra straps
+
+# 2. From BEHIND: Clean up front-only torso tags (`open shirt`, `cleavage`, `unbuttoned`) so the model doesn't
+#    hallucinate a front collar on the spine or twist the character backward when clothed from behind.
+REPLACE open shirt, unbuttoned shirt => shirt     | WHEN TOPS, open shirt, unbuttoned shirt | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE open blouse, unbuttoned blouse => blouse  | WHEN TOPS, open blouse, unbuttoned blouse | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE open dress => dress                       | WHEN DRESSES, open dress | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+REPLACE open sweater => sweater                   | WHEN TOPS, open sweater | VIEW BACK | UNLESS FRONT, SIDE, OPEN_BACK, TOP_REVEAL
+HIDE ~cleavage, unbuttoned, partially unbuttoned, open clothes, front zipper, plunging neckline, ~breasts out, ~breast slip, ~nipple slip | WHEN TOPS, DRESSES, OUTERWEAR | VIEW BACK | UNLESS FRONT, SIDE, TOP_REVEAL
+
+# 3. From FRONT / SIDE / ABOVE: Hide bra under a closed top or dress unless opened in front (`OPEN_FRONT`) or lifted/sheer (`TOP_REVEAL`).
+HIDE BRAS | WHEN TOPS, DRESSES | VIEW !BACK | UNLESS OPEN_FRONT, TOP_REVEAL
+
+# 4. Explicitly closed outerwear hides bra even from front unless lifted/sheer:
+HIDE BRAS | WHEN CLOSED_OUTER | VIEW ANY | UNLESS TOP_REVEAL
+
+
+# --- B. Lower Body: Panties vs Skirt / Dress / Pants / Shorts ---
+# 5. Skirt or Dress obscures Panties from normal angles unless lifted, viewed from below, upskirt, or seated with spread legs:
+HIDE PANTIES | WHEN SKIRTS, DRESSES | VIEW ANY | UNLESS VIEW:BELOW, SKIRT_REVEAL, sitting + ~spread legs, squatting + ~spread legs, all fours + VIEW:BACK, bent over + VIEW:BACK
+
+# 6. Pants / Shorts / Leggings obscure Panties from all angles unless pulled down/aside or peeking:
+HIDE PANTIES | WHEN PANTS | VIEW ANY | UNLESS PANTS_REVEAL, unzipped + !OUTERWEAR
+
+
+# ==============================================================================
+# STAGE 2: VISIBLE-ONLY OVERLAPS & SYNERGIES (`COMBO`)
+# ==============================================================================
+# Evaluated AFTER Stage 1! If `panties` were hidden by a skirt in Rule 5, `PANTIES + LEGWEAR`
+# automatically will NOT fire — eliminating the need for separate exclusion (`EX`) nodes!
+
+# 1. Panties + Pantyhose / Tights -> `(panties under pantyhose:1.1)`
+COMBO PANTIES + LEGWEAR => (panties under pantyhose:1.1) | UNLESS panties over pantyhose, ~panties around one leg | PLACEHOLDER /*panties under pantyhose, */
+
+# 2. Pants / Shorts + Skirt -> `pants under skirt`
+COMBO PANTS + SKIRTS    => pants under skirt             | PLACEHOLDER /*pants under skirt, */
+
+# 3. Pants / Shorts + Dress -> `pants under dress`
+COMBO PANTS + DRESSES   => pants under dress             | PLACEHOLDER /*pants under dress, */

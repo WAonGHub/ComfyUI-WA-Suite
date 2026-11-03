@@ -4,7 +4,8 @@ import { api } from "../../../scripts/api.js";
 const FILTER_CLASS = "WFA_PromptLabelFilter";
 const LOADER_CLASS = "WFA_BatchPromptLoader";
 const SWITCH_LOADER_CLASS = "WFA_BatchPromptSwitchLoader";
-const LOADER_CLASSES = new Set([LOADER_CLASS, SWITCH_LOADER_CLASS]);
+const OUTFIT_RESOLVER_CLASS = "WFA_OutfitConflictResolver";
+const LOADER_CLASSES = new Set([LOADER_CLASS, SWITCH_LOADER_CLASS, OUTFIT_RESOLVER_CLASS]);
 const UNTAGGED_LABEL = "UNTAGGED";
 const STYLE_ID = "wfa-batch-prompts-styles";
 

@@ -139,6 +139,18 @@ negative: /*AVOID, *//*SCENEneg, *//*NEGATIVE, */lowres, blurry
     - Switch between color-highlighted **`Prompt`** view (`<lora:...>` emerald, `(weight:1.2)` cyan, `{a|b}` violet, `/*UNREPLACED*/` amber) and per-tag **`Tokens`** breakdown table.
   - **`WFA Cockpit Pipe Out ⚡` & `WFA Cockpit Pipe In ⚡`**: Consolidate all 31 backend outputs (`Pipe Out`) and backend intakes (`c1_enable`–`c5_enable`, `lora_stack_in`, `final_prompt`, `clip` on `Pipe In`). Wiring `Pipe Out.pipe` + `final_prompt` + `clip` into `Pipe In` at the end of prompt compilation pushes live exact token breakdowns back to an upstream `WFA Prompt Inspector` with **zero graph cycles**.
 
+### 10. `WFA Outfit & Perspective Resolver ⚡ (WFA Suite)`
+- **Category**: `WFA Node Suite/Prompts`
+- **Features**:
+  - Replaces 20+ `ImpactLogicalOperators` + `Node Status Switch` + `Find & Replace` overlap/exception gates with **one compact, zero-wire-spaghetti node** powered by an editable, hot-reloading `.txt` rulesheet (`ComfyUI-WA-Suite/rules/outfit_conflicts.txt`).
+  - **Automatic Camera Perspective & Reveal Detection**: Scans the assembled prompt for `@view` angles (`BACK`, `BELOW`, `ABOVE`, `SIDE`, or default `FRONT` — supporting simultaneous combinations like `BACK + BELOW`) and directional reveal modifiers (`open shirt` vs `backless` vs `shirt lift`, `skirt lift`, `upskirt`, `sitting + ~spread legs`, etc.).
+  - **2-Stage Occlusion $\rightarrow$ Combo Engine**:
+    - **Stage 1 (`HIDE` / `REPLACE`)**: Strips occluded inner garments (e.g. hides `bra` under an `open shirt` when viewed `from behind`, or `panties` under a `skirt` without a reveal trigger) and rewrites/cleans front-only tags on back views (`open shirt => shirt`, `cleavage`, `partially unbuttoned`) while preserving `<lora:...>` tags, `/*...*/` comments, and outer group weights like `(white shirt, lace bra:1.2)` $\rightarrow$ `(white shirt:1.2)`.
+    - **Stage 2 (`COMBO`)**: Evaluates layer synergies (`(panties under pantyhose:1.1)`, `pants under skirt`, `pants under dress`) **after** Stage 1 so occluded items never trigger combos — eliminating separate exclusion (`EX`) nodes! Supports both `PLACEHOLDER /*...*/` replacement (with automatic unused-placeholder cleanup) and inline tag injection.
+    - **Stage 3 (`+NEG` / `NEG`)**: Appends triggered negative safety reinforcements (e.g. `bra, bra straps` on clothed `BACK` views) to an optional `negative` passthrough so LoRAs don't draw occluded garments over outer clothes.
+  - **False-Positive Immunity & Multi-Character Scoping**: Word-boundary matching (`~bra` never hits `braided hair`, `bracelet`, or `no bra`; `~dress` + `-~dress shirt` never hits `maid headdress` or `white dress shirt`), plus `Auto (Per [Char: ...] + Global)` scoping so `[CharA: ...]` and `[CharB: ...]` resolve their own outfits independently while inheriting global camera angles.
+  - **Hot-Reloading `.txt` Rulesheets**: Edit `rules/outfit_conflicts.txt` (or drop new `.txt` presets into `rules/`) and save — changes take effect immediately on the very next run without restarting ComfyUI.
+
 ## Installation
 
 ### Via ComfyUI-Manager
