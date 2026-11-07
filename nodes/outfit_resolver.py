@@ -731,10 +731,16 @@ def _resolve_single_scope(
         elif rule["action"] == "REPLACE":
             rep_str = rule["replacement"]
             rep_norm = rule["replacement_norm"]
-            rep_word_pat = _compile_single_atom(f"~{rep_norm}")[0] if rep_norm else None
-            # Check if another non-targeted tag in this scope already contains the replacement word
+            is_wildcard_suffix = rep_str.startswith("*") and len(rep_str[1:].strip()) > 0
+            wildcard_suffix_word = rep_str[1:].strip() if is_wildcard_suffix else ""
+            rep_word_pat = (
+                _compile_single_atom(f"~{_normalize_phrase(wildcard_suffix_word)}")[0]
+                if is_wildcard_suffix
+                else (_compile_single_atom(f"~{rep_norm}")[0] if rep_norm else None)
+            )
+            # Check if another non-targeted tag in this scope already contains the replacement word (for non-wildcard replacements)
             other_has_rep = False
-            if rep_word_pat is not None:
+            if not is_wildcard_suffix and rep_word_pat is not None:
                 for seg in segments:
                     if not seg["alive"] or seg["is_special"] or not seg["norm"]:
                         continue
@@ -743,12 +749,43 @@ def _resolve_single_scope(
                         break
 
             open_prefix_re = re.compile(r"^(?:partially[\s_]+|wide[\s_]+)?(?:open|unbuttoned)[\s_]+", re.IGNORECASE)
+            trailing_word_re = re.compile(r"[A-Za-z]+\s*$")
+            existing_alive_norms = {
+                seg["norm"] for seg in segments if seg["alive"] and not seg["is_special"] and seg["norm"]
+            }
 
             for seg in segments:
                 if not seg["alive"] or seg["is_special"] or not seg["norm"]:
                     continue
                 if target_grp.matches_tag(seg["norm"], groups_map):
                     old_name = seg["core_raw"].strip()
+                    if is_wildcard_suffix:
+                        # Suffix singularization/rewrite (e.g. `blue eyes` -> `blue eye`, `(dark-blue_eyes:1.1)` -> `(dark-blue_eye:1.1)`)
+                        new_core = trailing_word_re.sub(wildcard_suffix_word, old_name).strip()
+                        new_norm = _normalize_phrase(new_core)
+                        if not new_core or new_norm == _normalize_phrase(wildcard_suffix_word):
+                            continue
+                        if new_norm in existing_alive_norms and new_norm != seg["norm"]:
+                            replaced_log.append(f"{old_name}→(removed)")
+                            rem_p, rem_s, unmatched_close = _strip_balanced_wrappers(seg["prefix"], seg["suffix"])
+                            kept_shell = rem_p + (seg["weight_str"] if unmatched_close else "") + rem_s
+                            if kept_shell.strip():
+                                seg["raw"] = kept_shell
+                                seg["is_special"] = True
+                                seg["norm"] = ""
+                            else:
+                                seg["alive"] = False
+                            did_affect = True
+                        else:
+                            replaced_log.append(f"{old_name}→{new_core}")
+                            existing_alive_norms.discard(seg["norm"])
+                            existing_alive_norms.add(new_norm)
+                            seg["core_raw"] = new_core
+                            seg["norm"] = new_norm
+                            seg["raw"] = f"{seg['prefix']}{new_core}{seg['weight_str']}{seg['suffix']}"
+                            did_affect = True
+                        continue
+
                     # Preserve color/style adjectives when rewriting e.g. `open crimson hanfu` -> `crimson hanfu`
                     stripped_adj = open_prefix_re.sub("", old_name).strip()
                     stripped_adj_norm = _normalize_phrase(stripped_adj)

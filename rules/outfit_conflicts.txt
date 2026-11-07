@@ -84,6 +84,32 @@
 @group PANTS     = ~pants, ~jeans, ~trousers, ~shorts, ~bloomers, ~leggings, ~bike shorts, -~no pants, -~no shorts, -~under skirt, -~under dress, -~pants pull, -~shorts pull, -~pants down, -~shorts down, -~pants around one leg, -~shorts around one leg, -~shorts aside, -~pants aside
 
 
+# ------------------------------------------------------------------------------
+# 4. FACIAL & EYE OCCLUSION GROUPS (`@group`)
+# ------------------------------------------------------------------------------
+# Head turned completely away from camera (no face visible):
+@group FACING_AWAY        = ~facing away, ~facing back, ~back of head
+
+# Single-eye occlusion triggers (rewrites `<color/style> eyes` => `<color/style> eye`):
+@group ONE_EYE_OCCLUDED   = ~eyepatch, ~eye patch, ~one eye covered, ~hair over one eye, ~one eye closed, ~one-eyed, ~flower over eye, ~scar over *eye, ~scar across *eye
+
+# Tags requiring two visible eyes (hidden when one eye is covered by an eyepatch):
+@group TWO_EYE_ONLY       = ~heterochromia, ~multicolored eyes, ~uneven eyes, ~mismatched pupils, ~mismatched eyebrows, ~extra eyes, alternate eye color
+
+# Plural `<color/descriptor> eyes` tags that singularize to `<color/descriptor> eye` under `ONE_EYE_OCCLUDED`:
+@group EYE_PLURAL         = * eyes, -~closed eyes, -~half-closed eyes, -~narrowed eyes, -~unusually open eyes, -~averting eyes, -~shading eyes, -~covering eyes, -~covered eyes, -~no eyes, -~extra eyes, -~uneven eyes, -~multicolored eyes, -~between eyes, -~over eyes, -~under eyes, -~around eyes, -~across eyes
+
+# Inner-eye details (iris color, pupils, sclera, inner symbols — hidden when `closed eyes` OR `facing away`):
+@group EYE_INTERIOR       = EYE_PLURAL, TWO_EYE_ONLY, ~pupils, ~pupil, ~no pupils, ~sclera, ~eyeball, * eye, -~one eye, -~over *eye, -~under *eye, -~across *eye, -~around *eye, -~half-closed eye, -~worm's-eye view, -~bird's-eye view, -~eye level, -~bull's-eye
+
+# Open-eye state/expression tags that conflict with `closed eyes`:
+@group OPEN_EYE_CONFLICTS = ~wide-eyed, ~unusually open eyes, ~narrowed eyes, ~half-closed eyes, ~half-closed eye, ~squinting, ~one eye closed, ~wink, ~averting eyes, ~eyes visible through hair, ~blank eyes, ~no eyes, ~crazy eyes, ~upturned eyes, ~tsurime, ~tareme, ~sanpaku, ~eye trail
+
+# All outer eye, eyebrow, eyelash, eyewear, mouth/lips/teeth/tongue, nose, cheek, forehead, facial mark, and front-bang features
+# (kept when `closed eyes` from front, hidden when `facing away`):
+@group FACE_FEATURES      = OPEN_EYE_CONFLICTS, ONE_EYE_OCCLUDED, ~eyes, ~eye, ~no eyes, ~eyebrows, ~eyebrow, ~no eyebrows, ~furrowed brow, ~eyelashes, ~eyelash, ~eyeliner, ~eyeshadow, ~makeup, ~eyewear, ~glasses, ~sunglasses, ~goggles, ~monocle, ~lips, ~lipgloss, ~lipstick, ~mouth, ~no mouth, ~teeth, ~tooth, ~fangs, ~fang, ~tongue, ~nose, ~no nose, ~nostrils, ~cheek, ~cheeks, ~cheekbones, ~whiskers, ~whisker markings, ~freckles, ~dimples, ~forehead, ~face, ~facial, ~faceless, ~gesugao, ~expressionless, ~masked, ~mask, ~beard, ~mustache, ~goatee, ~mole, ~bangs, ~hair intakes, ~hime cut, ~animal ear fluff, ~oni horns, -~worm's-eye view, -~bird's-eye view, -~eye level, -~bull's-eye, -~mole on breast, -~mole on breasts, -~mole on chest, -~mole on ass, -~mole on thigh, -~mole on back, -~mole on stomach, -~mole on neck, -~mole on shoulder, -~mask on head, -~mask on side, -~unmasked
+
+
 # ==============================================================================
 # STAGE 1: DIRECTIONAL & LAYER OCCLUSION RULES (`HIDE` / `REPLACE`)
 # ==============================================================================
@@ -123,6 +149,18 @@ HIDE PANTIES | WHEN SKIRTS, DRESSES | VIEW ANY | UNLESS VIEW:BELOW, SKIRT_REVEAL
 
 # 7. Pants / Shorts / Leggings obscure Panties from all angles unless pulled down/aside or peeking:
 HIDE PANTIES | WHEN PANTS | VIEW ANY | UNLESS PANTS_REVEAL, unzipped + !OUTERWEAR
+
+
+# --- C. Facial & Eye Occlusion (`facing away`, `closed eyes`, `eyepatch`) ---
+# 8. Facing Away: Head turned away from camera hides all eyes, pupils, eyebrows, eyelashes, eyewear, nose, mouth/lips/teeth, facial marks, and front bangs:
+HIDE EYE_INTERIOR, FACE_FEATURES | WHEN FACING_AWAY | VIEW ANY | UNLESS ~looking back, ~looking at viewer, VIEW:FRONT, VIEW:SIDE
+
+# 9. Closed Eyes: Both eyelids shut hides all eye colors, pupils, sclera, and open-eye expressions while keeping eyelashes, eyebrows, glasses, and mouth/nose:
+HIDE EYE_INTERIOR, OPEN_EYE_CONFLICTS | WHEN ~closed eyes + !~half-closed eyes + !~one eye closed | VIEW ANY
+
+# 10. Eyepatch / One Eye Covered: Hides two-eye-only tags (`heterochromia`) and singularizes `<color> eyes` => `<color> eye` (e.g. `blue eyes` => `blue eye`):
+HIDE TWO_EYE_ONLY          | WHEN ONE_EYE_OCCLUDED | VIEW ANY | UNLESS ~closed eyes
+REPLACE EYE_PLURAL => * eye | WHEN ONE_EYE_OCCLUDED | VIEW ANY | UNLESS ~closed eyes
 
 
 # ==============================================================================
