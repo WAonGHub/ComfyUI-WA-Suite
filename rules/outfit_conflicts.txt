@@ -153,7 +153,7 @@ HIDE PANTIES | WHEN PANTS | VIEW ANY | UNLESS PANTS_REVEAL, unzipped + !OUTERWEA
 
 # --- C. Facial & Eye Occlusion (`facing away`, `closed eyes`, `eyepatch`) ---
 # 8. Facing Away: Head turned away from camera hides all eyes, pupils, eyebrows, eyelashes, eyewear, nose, mouth/lips/teeth, facial marks, and front bangs:
-HIDE EYE_INTERIOR, FACE_FEATURES | WHEN FACING_AWAY | VIEW ANY | UNLESS ~looking back, ~looking at viewer, VIEW:FRONT, VIEW:SIDE
+HIDE EYE_INTERIOR, FACE_FEATURES | WHEN FACING_AWAY | VIEW ANY | UNLESS ~looking back, ~looking at viewer, VIEW:SIDE
 
 # 9. Closed Eyes: Both eyelids shut hides all eye colors, pupils, sclera, and open-eye expressions while keeping eyelashes, eyebrows, glasses, and mouth/nose:
 HIDE EYE_INTERIOR, OPEN_EYE_CONFLICTS | WHEN ~closed eyes + !~half-closed eyes + !~one eye closed | VIEW ANY

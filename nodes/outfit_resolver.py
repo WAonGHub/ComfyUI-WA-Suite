@@ -21,6 +21,7 @@ _LORA_OR_ANGLE_TAG_RE = re.compile(r"^<[^>]+>$")
 _INLINE_HASH_COMMENT_RE = re.compile(r"(?:^|\s+)#.*$")
 # Matches `[Name: tag1, tag2, ...]` character blocks while ignoring `[from:to:0.5]` step syntax
 _CHAR_BLOCK_RE = re.compile(r"\[([A-Za-z][A-Za-z0-9_ -]{0,28}):([^\[\]]+)\]")
+_CHAR_SECTION_COMMENT_RE = re.compile(r"/\*\s*(C[1-5]|CHAR\s*[1-5]|GLOBAL|SCENE)\s*:?\s*\*/", re.IGNORECASE)
 _STEP_EDIT_SUFFIX_RE = re.compile(r":\s*\d*\.?\d+\s*$")
 
 
@@ -946,6 +947,70 @@ def resolve_outfit_conflicts(
         }
 
     if scope_mode.startswith("Auto"):
+        # 1. Check for `/*C1*/ ... /*C2*/ ... /*GLOBAL*/` comment section markers
+        sec_matches = list(_CHAR_SECTION_COMMENT_RE.finditer(positive))
+        if sec_matches:
+            spans: list[tuple[str, str, str]] = []
+            if sec_matches[0].start() > 0:
+                spans.append(("GLOBAL", "", positive[: sec_matches[0].start()]))
+            for idx, sm in enumerate(sec_matches):
+                kind_raw = sm.group(1).upper().replace(" ", "")
+                kind = "GLOBAL" if kind_raw in ("GLOBAL", "SCENE") else kind_raw
+                marker_raw = sm.group(0)
+                body_start = sm.end()
+                body_end = sec_matches[idx + 1].start() if idx + 1 < len(sec_matches) else len(positive)
+                spans.append((kind, marker_raw, positive[body_start:body_end]))
+
+            global_text_combined = ", ".join(body for kind, _, body in spans if kind == "GLOBAL" and body.strip())
+            global_segs = _tokenize_prompt_segments(global_text_combined)
+            global_tags = [s["norm"] for s in global_segs if s["alive"] and not s["is_special"] and s["norm"]]
+            global_views = _detect_views(global_tags, compiled_rules["views"], compiled_rules["groups"])
+
+            all_hidden: list[str] = []
+            all_replaced: list[str] = []
+            all_combos: list[str] = []
+            all_negs: list[str] = []
+            rebuilt_parts: list[str] = []
+            combined_views: set[str] = set(global_views)
+
+            for kind, marker_raw, body in spans:
+                if not body.strip():
+                    if not clean_placeholders and marker_raw:
+                        rebuilt_parts.append(marker_raw)
+                    continue
+                if kind == "GLOBAL":
+                    sub = _resolve_single_scope(body, compiled_rules, clean_placeholders=clean_placeholders)
+                else:
+                    sub = _resolve_single_scope(
+                        body,
+                        compiled_rules,
+                        clean_placeholders=clean_placeholders,
+                        inherited_views=global_views,
+                        inherited_norm_tags=global_tags,
+                    )
+                    combined_views |= sub["views"]
+                prefix_marker = "" if clean_placeholders else marker_raw
+                if sub["text"]:
+                    rebuilt_parts.append(f"{prefix_marker}{sub['text']}" if prefix_marker else sub["text"])
+                elif prefix_marker:
+                    rebuilt_parts.append(prefix_marker)
+                all_hidden.extend(sub["hidden"])
+                all_replaced.extend(sub["replaced"])
+                all_combos.extend(sub["combos"])
+                for nt in sub["added_negs"]:
+                    if nt not in all_negs:
+                        all_negs.append(nt)
+
+            return {
+                "text": _cleanup_reassembled_prompt(", ".join(rebuilt_parts)),
+                "views": combined_views,
+                "hidden": all_hidden,
+                "replaced": all_replaced,
+                "combos": all_combos,
+                "added_negs": all_negs,
+            }
+
+        # 2. Check for `[Name: tags...]` character blocks (excluding `[a:b:0.5]` step edits)
         # Mask `/*...*/` comments with equal-length spaces so `[SLOT]` inside `/*[SLOT], */` doesn't break `[Name: ...]`
         masked_pos = re.sub(r"/\*.*?\*/", lambda c: " " * len(c.group(0)), positive, flags=re.DOTALL)
         matches = [
